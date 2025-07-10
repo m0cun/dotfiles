@@ -755,7 +755,7 @@ clone_dotfiles() {
     log_info "dotfiles 仓库已存在，跳过克隆步骤"
   else
     log_info "克隆 dotfiles 仓库到 $DOTFILES_DIR"
-    git clone --depth=1 https://github.com/yourusername/dotfiles.git "$DOTFILES_DIR"
+    git clone --depth=1 https://github.com/m0cun/dotfiles.git "$DOTFILES_DIR"
     
     if [ $? -ne 0 ]; then
       log_error "克隆仓库失败"

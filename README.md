@@ -23,7 +23,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yourusername/dotfiles.git ~/.dotfile
+git clone https://github.com/m0cun/dotfiles.git ~/.dotfile
 cd ~/.dotfile
 
 # 运行安装脚本
@@ -82,7 +82,7 @@ cd ~/.dotfile
 #### 克隆仓库
 
 ```bash
-git clone https://github.com/yourusername/dotfiles.git ~/.dotfile
+git clone https://github.com/m0cun/dotfiles.git ~/.dotfile
 cd ~/.dotfile
 ```
 
