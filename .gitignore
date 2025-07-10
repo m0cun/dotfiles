@@ -1,0 +1,43 @@
+# 本地配置文件
+zsh/.config/zsh/configs/local_configs/*
+
+# ZSH插件（由安装脚本自动管理）
+zsh/.config/zsh/plugins/
+
+# 缓存文件
+.DS_Store
+.Trash/
+.cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 编辑器和IDE文件
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# 敏感信息
+.env
+.secrets
+.private
+
+# 日志文件
+*.log
+logs/
+
+# 二进制文件和编译输出
+*.o
+*.so
+*.dylib
+*.dll
+*.exe
+*.out
+
+# 其他
+node_modules/
+.npm/
+.yarn/ 

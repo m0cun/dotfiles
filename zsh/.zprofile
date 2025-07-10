@@ -1,0 +1,37 @@
+# .zprofile
+# 这个文件在登录时会被加载，而.zshrc在每次新建终端时都会加载
+# 在此文件中设置只需在登录时加载一次的设置
+
+# 确保/usr/local/bin在PATH中
+export PATH="$PATH:/usr/local/bin"
+
+# 加载操作系统特定的配置
+# 判断操作系统类型
+if [[ "$(uname)" == "Darwin" ]]; then
+  # macOS系统
+  
+  # 加载OrbStack配置（如果存在）
+  if [[ -f "$HOME/.orbstack/shell/init.zsh" ]]; then
+    source "$HOME/.orbstack/shell/init.zsh" 2>/dev/null || :
+  fi
+  
+  # 检测是否为Apple Silicon
+  if [[ "$(uname -m)" == "arm64" ]]; then
+    # Apple Silicon特定配置
+    # 在这里添加特定于Apple Silicon的配置
+    :
+  else
+    # Intel Mac特定配置
+    # 在这里添加特定于Intel Mac的配置
+    :
+  fi
+elif [[ "$(uname)" == "Linux" ]]; then
+  # Linux系统特定配置
+  # 在这里添加Linux特定的配置
+  :
+fi
+
+# 加载本地配置（不受版本控制）
+if [[ -f "$ZDOTDIR/configs/local_configs/local-profile.zsh" ]]; then
+  source "$ZDOTDIR/configs/local_configs/local-profile.zsh"
+fi 
