@@ -48,10 +48,11 @@ if [[ -f "$ZDOTDIR/configs/os-specific/exports-${OS_TYPE}.zsh" ]]; then
 fi
 
 # 加载本地配置目录中的文件（不受版本控制的配置）
-for config_file in "$ZDOTDIR/configs/local_configs/"*.zsh; do
-  if [[ -f "$config_file" ]]; then
-    source "$config_file"
-  fi
+# 使用数组和 nullglob 选项避免无匹配文件时的错误
+setopt local_options nullglob
+config_files=("$ZDOTDIR/configs/local_configs/"*.zsh)
+for config_file in "${config_files[@]}"; do
+  [[ -f "$config_file" ]] && source "$config_file"
 done
 
 # 结束性能分析（如果已启用）

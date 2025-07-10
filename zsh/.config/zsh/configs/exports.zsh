@@ -7,8 +7,15 @@
 export EDITOR="nvim"
 
 # 设置PATH
-export PATH="/usr/local/bin:$PATH"
-export PATH="/usr/local/sbin:$PATH"
+if [[ -n "$HOMEBREW_PREFIX" ]]; then
+  # Use Homebrew prefix if available (set in os-detection.zsh for macOS)
+  export PATH="$HOMEBREW_PREFIX/bin:$PATH"
+  export PATH="$HOMEBREW_PREFIX/sbin:$PATH"
+else
+  # Fallback for other systems or if Homebrew is not managed this way
+  export PATH="/usr/local/bin:$PATH"
+  export PATH="/usr/local/sbin:$PATH"
+fi
 
 # ------------------------------
 # 编程语言环境

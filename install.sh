@@ -1074,6 +1074,74 @@ install_zsh_plugins() {
   log_success "ZSH 插件安装完成"
 }
 
+# 备份现有文件
+backup_existing_files() {
+  local package="$1"
+  local backup_dir="$HOME/.dotfiles_backup/$(date +%Y%m%d_%H%M%S)"
+  local has_conflicts=false
+  
+  log_info "检查 $package 的文件冲突..."
+  
+  # 使用 stow --no 进行干运行，检查冲突
+  local conflicts=$(stow --no --verbose=2 "$package" 2>&1 | grep "existing target is" || true)
+  
+  if [[ -n "$conflicts" ]]; then
+    has_conflicts=true
+    log_warning "发现现有文件冲突，准备备份..."
+    
+    if confirm_action "是否备份现有文件并继续？" "y"; then
+      mkdir -p "$backup_dir"
+      
+      # 解析冲突文件并备份
+      echo "$conflicts" | while read -r line; do
+        if [[ "$line" =~ "existing target is" ]]; then
+          # 提取文件路径
+          target_file=$(echo "$line" | sed -n 's/.*existing target is \(.*\) but is.*/\1/p')
+          if [[ -n "$target_file" && -e "$target_file" ]]; then
+            # 创建备份目录结构
+            backup_file="$backup_dir/$target_file"
+            mkdir -p "$(dirname "$backup_file")"
+            cp -r "$target_file" "$backup_file"
+            log_info "已备份: $target_file -> $backup_file"
+            rm -rf "$target_file"
+          fi
+        fi
+      done
+      
+      log_success "文件备份完成到: $backup_dir"
+    else
+      log_error "用户取消，跳过 $package 的符号链接创建"
+      return 1
+    fi
+  fi
+  
+  return 0
+}
+
+# 安全执行 stow 命令
+safe_stow() {
+  local package="$1"
+  
+  if [ ! -d "$package" ]; then
+    log_warning "目录 $package 不存在，跳过"
+    return 0
+  fi
+  
+  # 备份冲突文件
+  if ! backup_existing_files "$package"; then
+    return 1
+  fi
+  
+  # 执行 stow
+  log_info "为 $package 创建符号链接..."
+  if stow "$package"; then
+    log_success "$package 符号链接创建完成"
+  else
+    log_error "$package 符号链接创建失败"
+    return 1
+  fi
+}
+
 # 使用 stow 创建符号链接
 create_symlinks() {
   log_info "使用 stow 创建符号链接..."
@@ -1081,25 +1149,23 @@ create_symlinks() {
   # 进入 dotfiles 目录
   cd "$DOTFILES_DIR"
   
-  # 使用 stow 创建符号链接
-  stow zsh
-  stow starship
-  stow nvim
-  stow helix
-  stow bat
-  stow lsd
-  stow yazi
-  stow zellij
+  # 定义要处理的包列表
+  local packages=("zsh" "starship" "nvim" "helix" "bat" "lsd" "yazi" "zellij")
+  
+  # 安全地为每个包创建符号链接
+  for package in "${packages[@]}"; do
+    safe_stow "$package"
+  done
   
   # tssh 如果存在则创建符号链接
   if [ -d "tssh" ]; then
-    stow tssh
+    safe_stow "tssh"
   fi
   
   # kitty 不默认安装，但如果已安装则创建符号链接
   if command -v kitty &> /dev/null; then
     log_info "检测到 kitty 已安装，创建其符号链接..."
-    stow kitty
+    safe_stow "kitty"
   else
     log_info "未检测到 kitty，跳过其符号链接创建"
   fi

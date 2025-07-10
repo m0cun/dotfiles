@@ -95,10 +95,9 @@ alias listen="lsof -nP -iTCP -sTCP:listen"
 # ------------------------------
 # bat主题
 if command -v bat &>/dev/null; then
-  export BAT_THEME="Catppuccin Mocha"
   # 美化帮助信息
   alias bathelp='bat --plain --language=help'
   function help() {
     "$@" --help 2>&1 | bathelp
   }
-fi 
+fi

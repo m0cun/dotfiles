@@ -2,9 +2,6 @@
 # 这个文件在登录时会被加载，而.zshrc在每次新建终端时都会加载
 # 在此文件中设置只需在登录时加载一次的设置
 
-# 确保/usr/local/bin在PATH中
-export PATH="$PATH:/usr/local/bin"
-
 # 加载操作系统特定的配置
 # 判断操作系统类型
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -18,12 +15,12 @@ if [[ "$(uname)" == "Darwin" ]]; then
   # 检测是否为Apple Silicon
   if [[ "$(uname -m)" == "arm64" ]]; then
     # Apple Silicon特定配置
-    # 在这里添加特定于Apple Silicon的配置
-    :
+    # 确保 Homebrew bin 目录在 PATH 中
+    export PATH="$PATH:/opt/homebrew/bin"
   else
     # Intel Mac特定配置
-    # 在这里添加特定于Intel Mac的配置
-    :
+    # 确保 Homebrew bin 目录在 PATH 中
+    export PATH="$PATH:/usr/local/bin"
   fi
 elif [[ "$(uname)" == "Linux" ]]; then
   # Linux系统特定配置
