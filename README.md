@@ -22,8 +22,8 @@
 提供了自动化安装脚本，可以一键设置所有配置：
 
 ```bash
-# 克隆仓库
-git clone https://github.com/m0cun/dotfiles.git ~/.dotfile
+# 克隆仓库（包括所有子模块）
+git clone --recurse-submodules https://github.com/m0cun/dotfiles.git ~/.dotfile
 cd ~/.dotfile
 
 # 运行安装脚本
@@ -61,7 +61,7 @@ cd ~/.dotfile
   - tcping: TCP 连接测试工具
   - gohttpserver: 高性能 HTTP 文件服务器
 - 创建所需目录结构
-- 安装 ZSH 插件
+- 安装/更新 ZSH 插件（作为 Git 子模块）
 - 使用 stow 创建符号链接
 
 特定系统安装的工具：
@@ -82,7 +82,7 @@ cd ~/.dotfile
 #### 克隆仓库
 
 ```bash
-git clone https://github.com/m0cun/dotfiles.git ~/.dotfile
+git clone --recurse-submodules https://github.com/m0cun/dotfiles.git ~/.dotfile
 cd ~/.dotfile
 ```
 
@@ -113,7 +113,7 @@ cd ~/.dotfile
 - 更新 Python 工具（如 uv，在 macOS 上通过 brew 更新）
 - 更新版本管理工具（jenv, fnm）
 - 更新 dotfiles 仓库
-- 更新所有 ZSH 插件
+- 更新所有 ZSH 插件（作为 Git 子模块）
 - 重新应用符号链接
 
 也可以手动更新：
@@ -121,6 +121,25 @@ cd ~/.dotfile
 ```bash
 cd ~/.dotfile
 git pull
+git submodule update --remote --recursive  # 更新所有子模块到最新版本
+```
+
+## Git 子模块
+
+本仓库使用 Git 子模块管理 ZSH 插件，包括：
+
+- fast-syntax-highlighting: 语法高亮
+- zsh-autosuggestions: 自动补全建议
+- zsh-history-substring-search: 历史搜索
+- zsh-you-should-use: 别名提示
+- forgit: 增强 git 操作
+- fzf-tab: 增强的 Tab 补全
+
+如果您没有使用 `--recurse-submodules` 选项克隆仓库，可以手动初始化和更新子模块：
+
+```bash
+git submodule init
+git submodule update --recursive
 ```
 
 ## ZSH配置说明

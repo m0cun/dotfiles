@@ -783,6 +783,17 @@ create_directories() {
 install_zsh_plugins() {
   log_info "安装 ZSH 插件..."
   
+  # 如果是通过 Git 克隆的仓库，更新子模块
+  if [ -d "$DOTFILES_DIR/.git" ]; then
+    log_info "检测到 Git 仓库，初始化并更新子模块..."
+    cd "$DOTFILES_DIR"
+    git submodule init
+    git submodule update --recursive
+    log_success "Git 子模块更新完成"
+    return 0
+  fi
+  
+  # 以下代码仅在非 Git 克隆的情况下执行
   # 安装 fast-syntax-highlighting
   if [ ! -d "$ZSH_PLUGINS_DIR/fast-syntax-highlighting" ]; then
     log_info "安装 fast-syntax-highlighting..."

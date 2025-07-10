@@ -1,0 +1,18 @@
+[submodule "zsh/.config/zsh/plugins/fast-syntax-highlighting"]
+	path = zsh/.config/zsh/plugins/fast-syntax-highlighting
+	url = https://github.com/zdharma-continuum/fast-syntax-highlighting.git
+[submodule "zsh/.config/zsh/plugins/zsh-autosuggestions"]
+	path = zsh/.config/zsh/plugins/zsh-autosuggestions
+	url = https://github.com/zsh-users/zsh-autosuggestions.git
+[submodule "zsh/.config/zsh/plugins/zsh-history-substring-search"]
+	path = zsh/.config/zsh/plugins/zsh-history-substring-search
+	url = https://github.com/zsh-users/zsh-history-substring-search.git
+[submodule "zsh/.config/zsh/plugins/zsh-you-should-use"]
+	path = zsh/.config/zsh/plugins/zsh-you-should-use
+	url = https://github.com/MichaelAquilina/zsh-you-should-use.git
+[submodule "zsh/.config/zsh/plugins/forgit"]
+	path = zsh/.config/zsh/plugins/forgit
+	url = https://github.com/wfxr/forgit.git
+[submodule "zsh/.config/zsh/plugins/fzf-tab"]
+	path = zsh/.config/zsh/plugins/fzf-tab
+	url = https://github.com/Aloxaf/fzf-tab.git

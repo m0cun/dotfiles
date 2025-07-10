@@ -1,8 +1,11 @@
 # 本地配置文件
 zsh/.config/zsh/configs/local_configs/*
 
-# ZSH插件（由安装脚本自动管理）
-zsh/.config/zsh/plugins/
+# ZSH临时文件
+zsh/.config/zsh/.zcompdump
+zsh/.config/zsh/.zcompdump*
+zsh/.config/zsh/.zsh_history
+zsh/.config/zsh/.zsh_sessions/
 
 # 缓存文件
 .DS_Store
