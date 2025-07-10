@@ -28,6 +28,39 @@ log_error() {
   echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# 用户确认函数
+confirm_action() {
+  local prompt="$1"
+  local default="$2"
+  local answer
+  
+  # 如果 CI 环境或非交互式环境，使用默认值
+  if [ -n "$CI" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+  
+  if [ "$default" = "y" ]; then
+    prompt="$prompt [Y/n] "
+  else
+    prompt="$prompt [y/N] "
+  fi
+  
+  read -p "$prompt" answer
+  
+  if [ -z "$answer" ]; then
+    answer="$default"
+  fi
+  
+  case "$answer" in
+    [Yy]*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 # 检测操作系统
 detect_os() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -69,67 +102,97 @@ update_system_packages() {
   
   if [ "$OS" = "macos" ]; then
     if command -v brew &> /dev/null; then
-      log_info "更新 Homebrew 包..."
-      brew update && brew upgrade
-      brew cleanup
+      if confirm_action "是否更新 Homebrew 包？" "y"; then
+        log_info "更新 Homebrew 包..."
+        brew update && brew upgrade
+        brew cleanup
+      fi
     fi
   elif [ "$OS" = "linux" ]; then
     if [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "kali" ]; then
-      log_info "更新 apt 包..."
-      sudo apt update && sudo apt upgrade -y
-      sudo apt autoremove -y
+      if confirm_action "是否更新 apt 包？" "y"; then
+        log_info "更新 apt 包..."
+        sudo apt update && sudo apt upgrade -y
+        sudo apt autoremove -y
+      fi
     elif [ "$DISTRO" = "redhat" ]; then
-      log_info "更新 dnf 包..."
-      sudo dnf upgrade -y
+      if confirm_action "是否更新 dnf 包？" "y"; then
+        log_info "更新 dnf 包..."
+        sudo dnf upgrade -y
+      fi
     elif [ "$DISTRO" = "arch" ]; then
-      log_info "更新 pacman 包..."
-      sudo pacman -Syu --noconfirm
+      if confirm_action "是否更新 pacman 包？" "y"; then
+        log_info "更新 pacman 包..."
+        sudo pacman -Syu --noconfirm
+      fi
+    fi
+  fi
+  
+  # 更新 Rust
+  if command -v rustup &> /dev/null; then
+    if confirm_action "是否更新 Rust？" "y"; then
+      log_info "更新 Rust..."
+      # 设置 Rust 镜像源
+      export RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
+      export RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
+      rustup update
+    fi
+  fi
+  
+  # 更新 Go 环境
+  if command -v go &> /dev/null; then
+    if confirm_action "是否设置 Go 镜像源？" "y"; then
+      log_info "设置 Go 镜像源..."
+      go env -w GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
+      log_success "Go 镜像源已设置为阿里云"
     fi
   fi
   
   # 更新 Python 工具
   if command -v uv &> /dev/null; then
-    log_info "更新 uv 及 Python 包..."
-    if [ "$OS" = "macos" ]; then
-      brew upgrade uv
-    elif command -v pip &> /dev/null; then
-      pip install --upgrade uv
-    elif command -v pip3 &> /dev/null; then
-      pip3 install --upgrade uv
-    else
-      curl -sSf https://astral.sh/uv/install.sh | sh
+    if confirm_action "是否更新 uv 及 Python 包？" "y"; then
+      log_info "更新 uv 及 Python 包..."
+      if [ "$OS" = "macos" ]; then
+        brew upgrade uv
+      elif command -v cargo &> /dev/null; then
+        cargo install --git https://github.com/astral-sh/uv uv
+      else
+        curl -sSf https://astral.sh/uv/install.sh | sh
+      fi
     fi
   fi
   
   # 更新 Node.js 版本管理工具
   if command -v fnm &> /dev/null; then
-    log_info "更新 fnm..."
-    if [ "$OS" = "macos" ]; then
-      brew upgrade fnm
-    else
-      # fnm 自动更新
-      log_info "fnm 版本：$(fnm --version)"
+    if confirm_action "是否更新 fnm？" "y"; then
+      log_info "更新 fnm..."
+      if [ "$OS" = "macos" ]; then
+        brew upgrade fnm
+      elif command -v cargo &> /dev/null; then
+        cargo install fnm
+      else
+        # fnm 自动更新
+        log_info "fnm 版本：$(fnm --version)"
+      fi
     fi
   fi
   
   # 更新 Java 版本管理工具
   if command -v jenv &> /dev/null; then
-    log_info "更新 jenv..."
-    if [ "$OS" = "macos" ]; then
-      brew upgrade jenv
-    else
-      # jenv 手动更新
-      cd ~/.jenv && git pull
+    if confirm_action "是否更新 jenv？" "y"; then
+      log_info "更新 jenv..."
+      if [ "$OS" = "macos" ]; then
+        brew upgrade jenv
+      else
+        # jenv 手动更新
+        cd ~/.jenv && git pull
+      fi
     fi
   fi
   
   # 更新 Rust 工具
-  if command -v rustup &> /dev/null; then
-    log_info "更新 Rust..."
-    rustup update
-    
-    # 更新常用的 Rust 包
-    if command -v cargo &> /dev/null; then
+  if command -v cargo &> /dev/null; then
+    if confirm_action "是否更新 Cargo 包？" "y"; then
       log_info "更新 Cargo 包..."
       if command -v lsd &> /dev/null && [[ "$(which lsd)" == *".cargo"* ]]; then
         cargo install --locked lsd
@@ -154,27 +217,31 @@ update_system_packages() {
   
   # 更新 Go 工具
   if command -v go &> /dev/null; then
-    log_info "更新 Go 工具..."
-    if command -v tssh &> /dev/null; then
-      go install github.com/trzsz/tssh@latest
-    fi
-    if command -v tcping &> /dev/null; then
-      go install github.com/pouriyajamshidi/tcping/v2@latest
-    fi
-    if command -v gohttpserver &> /dev/null; then
-      go install github.com/codeskyblue/gohttpserver@latest
+    if confirm_action "是否更新 Go 工具？" "y"; then
+      log_info "更新 Go 工具..."
+      if command -v tssh &> /dev/null; then
+        go install github.com/trzsz/tssh@latest
+      fi
+      if command -v tcping &> /dev/null; then
+        go install github.com/pouriyajamshidi/tcping/v2@latest
+      fi
+      if command -v gohttpserver &> /dev/null; then
+        go install github.com/codeskyblue/gohttpserver@latest
+      fi
     fi
   fi
   
   # 更新 nexttrace
   if command -v nexttrace &> /dev/null; then
-    log_info "更新 nexttrace..."
-    if [ "$OS" = "macos" ]; then
-      brew upgrade nexttrace
-    elif [ "$OS" = "linux" ]; then
-      curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
-      sudo mv /tmp/nexttrace /usr/local/bin/ && \
-      sudo chmod +x /usr/local/bin/nexttrace
+    if confirm_action "是否更新 nexttrace？" "y"; then
+      log_info "更新 nexttrace..."
+      if [ "$OS" = "macos" ]; then
+        brew upgrade nexttrace
+      elif [ "$OS" = "linux" ]; then
+        curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
+        sudo mv /tmp/nexttrace /usr/local/bin/ && \
+        sudo chmod +x /usr/local/bin/nexttrace
+      fi
     fi
   fi
   

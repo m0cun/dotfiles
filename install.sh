@@ -32,6 +32,39 @@ log_error() {
   echo -e "${RED}[ERROR]${NC} $1"
 }
 
+# 用户确认函数
+confirm_action() {
+  local prompt="$1"
+  local default="$2"
+  local answer
+  
+  # 如果 CI 环境或非交互式环境，使用默认值
+  if [ -n "$CI" ] || [ ! -t 0 ]; then
+    return 0
+  fi
+  
+  if [ "$default" = "y" ]; then
+    prompt="$prompt [Y/n] "
+  else
+    prompt="$prompt [y/N] "
+  fi
+  
+  read -p "$prompt" answer
+  
+  if [ -z "$answer" ]; then
+    answer="$default"
+  fi
+  
+  case "$answer" in
+    [Yy]*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 # 检测操作系统
 detect_os() {
   if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -72,6 +105,11 @@ install_homebrew() {
   if [ "$OS" = "macos" ]; then
     # 检查是否已安装 Homebrew
     if ! command -v brew &> /dev/null; then
+      if ! confirm_action "是否安装 Homebrew 包管理器？" "y"; then
+        log_info "跳过 Homebrew 安装"
+        return 0
+      fi
+      
       log_info "安装 Homebrew..."
       /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
       
@@ -135,6 +173,11 @@ install_exiftool() {
     return 0
   fi
   
+  if ! confirm_action "是否安装 exiftool (元数据查看工具)？" "y"; then
+    log_info "跳过 exiftool 安装"
+    return 0
+  fi
+  
   log_info "安装 exiftool..."
   
   if [ "$OS" = "macos" ]; then
@@ -175,6 +218,11 @@ install_zsh() {
   # 检查是否已安装 ZSH
   ZSH_PATH=$(which zsh 2>/dev/null)
   if [ -z "$ZSH_PATH" ]; then
+    if ! confirm_action "是否安装 ZSH？" "y"; then
+      log_info "跳过 ZSH 安装"
+      return 0
+    fi
+    
     log_info "ZSH 未安装，正在安装..."
     
     if [ "$OS" = "macos" ]; then
@@ -206,17 +254,30 @@ install_zsh() {
   fi
   
   # 将 ZSH 设置为默认 shell
-  log_info "设置 ZSH 为默认 shell..."
-  
-  # 检查 ZSH 是否在 /etc/shells 中
-  if ! grep -q "$ZSH_PATH" /etc/shells; then
-    echo "$ZSH_PATH" | sudo tee -a /etc/shells
+  if confirm_action "是否将 ZSH 设置为默认 shell？" "y"; then
+    log_info "设置 ZSH 为默认 shell..."
+    
+    # 检查 ZSH 是否在 /etc/shells 中
+    if ! grep -q "$ZSH_PATH" /etc/shells; then
+      echo "$ZSH_PATH" | sudo tee -a /etc/shells
+    fi
+    
+    # 检查是否有 chsh 命令
+    if command -v chsh &> /dev/null; then
+      chsh -s "$ZSH_PATH"
+      log_success "ZSH 已设置为默认 shell，请在安装完成后重新登录以应用更改"
+    else
+      log_warning "未找到 chsh 命令，无法自动设置默认 shell"
+      log_info "您可以手动运行以下命令来设置 ZSH 为默认 shell:"
+      echo "sudo usermod -s $ZSH_PATH $USER"
+      if confirm_action "是否尝试使用 usermod 设置 ZSH 为默认 shell？" "y"; then
+        sudo usermod -s "$ZSH_PATH" "$USER"
+        log_success "ZSH 已设置为默认 shell，请在安装完成后重新登录以应用更改"
+      fi
+    fi
+  else
+    log_info "跳过设置 ZSH 为默认 shell"
   fi
-  
-  # 更改默认 shell
-  chsh -s "$ZSH_PATH"
-  
-  log_success "ZSH 已设置为默认 shell，请在安装完成后重新登录以应用更改"
 }
 
 # 安装 Rust
@@ -228,13 +289,39 @@ install_rust() {
     return 0
   fi
   
+  if ! confirm_action "是否安装 Rust？" "y"; then
+    log_info "跳过 Rust 安装"
+    return 0
+  fi
+  
   log_info "安装 Rust..."
+  
+  # 设置 Rust 镜像源
+  log_info "设置 Rust 镜像源 (USTC)..."
+  export RUSTUP_DIST_SERVER=https://mirrors.ustc.edu.cn/rust-static
+  export RUSTUP_UPDATE_ROOT=https://mirrors.ustc.edu.cn/rust-static/rustup
+  
   curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
   
   # 加载环境变量
   source "$HOME/.cargo/env"
   
+  # 添加镜像源配置到 $HOME/.cargo/config.toml
+  log_info "配置 Cargo 镜像源..."
+  mkdir -p "$HOME/.cargo"
+  cat > "$HOME/.cargo/config.toml" << 'EOF'
+[source.crates-io]
+replace-with = 'ustc'
+
+[source.ustc]
+registry = "sparse+https://mirrors.ustc.edu.cn/crates.io-index/"
+
+[registries.ustc]
+index = "https://mirrors.ustc.edu.cn/crates.io-index"
+EOF
+
   log_success "Rust 安装完成: $(rustc --version)"
+  log_success "Cargo 镜像源已配置为 USTC"
 }
 
 # 安装 Go
@@ -243,6 +330,19 @@ install_go() {
   
   if command -v go &> /dev/null; then
     log_success "Go 已安装: $(go version)"
+    
+    # 设置 Go 代理
+    if confirm_action "是否设置 Go 镜像源 (阿里云)？" "y"; then
+      log_info "设置 Go 镜像源..."
+      go env -w GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
+      log_success "Go 镜像源已设置为阿里云"
+    fi
+    
+    return 0
+  fi
+  
+  if ! confirm_action "是否安装 Go？" "y"; then
+    log_info "跳过 Go 安装"
     return 0
   fi
   
@@ -270,7 +370,13 @@ install_go() {
     export GOPATH="$HOME/.go"
     export GOBIN="$GOPATH/bin"
     export PATH="$PATH:$GOBIN"
+    
+    # 设置 Go 代理
+    log_info "设置 Go 镜像源 (阿里云)..."
+    go env -w GOPROXY=https://mirrors.aliyun.com/goproxy/,direct
+    
     log_success "Go 安装完成: $(go version)"
+    log_success "Go 镜像源已设置为阿里云"
   else
     log_error "Go 安装失败"
   fi
@@ -282,14 +388,17 @@ install_python_tools() {
   
   # 安装 uv (Python 包管理工具)
   if ! command -v uv &> /dev/null; then
+    if ! confirm_action "是否安装 uv (Python 包管理工具)？" "y"; then
+      log_info "跳过 uv 安装"
+      return 0
+    fi
+    
     log_info "安装 uv (Python 包管理工具)..."
     
     if [ "$OS" = "macos" ]; then
       brew install uv
-    elif command -v pip &> /dev/null; then
-      pip install uv
-    elif command -v pip3 &> /dev/null; then
-      pip3 install uv
+    elif command -v cargo &> /dev/null; then
+      cargo install --git https://github.com/astral-sh/uv uv
     else
       curl -sSf https://astral.sh/uv/install.sh | sh
     fi
@@ -313,10 +422,17 @@ install_fnm() {
     return 0
   fi
   
+  if ! confirm_action "是否安装 fnm (Node.js 版本管理工具)？" "y"; then
+    log_info "跳过 fnm 安装"
+    return 0
+  fi
+  
   log_info "安装 fnm (Node.js 版本管理工具)..."
   
   if [ "$OS" = "macos" ]; then
     brew install fnm
+  elif command -v cargo &> /dev/null; then
+    cargo install fnm
   else
     curl -fsSL https://fnm.vercel.app/install | bash
     
@@ -338,6 +454,11 @@ install_jenv() {
   
   if command -v jenv &> /dev/null; then
     log_success "jenv 已安装: $(jenv --version)"
+    return 0
+  fi
+  
+  if ! confirm_action "是否安装 jenv (Java 版本管理工具)？" "y"; then
+    log_info "跳过 jenv 安装"
     return 0
   fi
   
@@ -367,25 +488,36 @@ install_jenv() {
 
 # 安装 Go 工具
 install_go_tools() {
-  if command -v go &> /dev/null; then
-    log_info "安装 Go 工具..."
-    
-    # 安装 tcping
-    if ! command -v tcping &> /dev/null; then
+  if ! command -v go &> /dev/null; then
+    log_warning "Go 未安装，跳过 Go 工具安装"
+    return 0
+  fi
+  
+  log_info "安装 Go 工具..."
+  
+  # 安装 tcping
+  if ! command -v tcping &> /dev/null; then
+    if confirm_action "是否安装 tcping (TCP 连接测试工具)？" "y"; then
       log_info "安装 tcping..."
       go install github.com/pouriyajamshidi/tcping/v2@latest
+      log_success "tcping 安装完成"
+    else
+      log_info "跳过 tcping 安装"
     fi
-    
-    # 安装 gohttpserver
-    if ! command -v gohttpserver &> /dev/null; then
+  fi
+  
+  # 安装 gohttpserver
+  if ! command -v gohttpserver &> /dev/null; then
+    if confirm_action "是否安装 gohttpserver (高性能 HTTP 文件服务器)？" "y"; then
       log_info "安装 gohttpserver..."
       go install github.com/codeskyblue/gohttpserver@latest
+      log_success "gohttpserver 安装完成"
+    else
+      log_info "跳过 gohttpserver 安装"
     fi
-    
-    log_success "Go 工具安装完成"
-  else
-    log_warning "Go 未安装，跳过 Go 工具安装"
   fi
+  
+  log_success "Go 工具安装完成"
 }
 
 # 检查并安装必要的依赖
@@ -421,327 +553,436 @@ install_dependencies() {
   
   if [ "$OS" = "macos" ]; then
     # 安装必要的包
-    log_info "安装必要的包..."
-    brew install git stow
+    if confirm_action "是否安装基础工具 (git, stow)？" "y"; then
+      log_info "安装必要的包..."
+      brew install git stow
+    fi
     
     # 安装 stow 列表中的软件
-    log_info "安装其他推荐的软件..."
-    brew install starship neovim helix bat lsd yazi 
+    if confirm_action "是否安装推荐软件 (starship, neovim, helix, bat, lsd, yazi)？" "y"; then
+      log_info "安装其他推荐的软件..."
+      brew install starship neovim helix bat lsd yazi 
+    fi
     
     # 安装额外的工具
-    log_info "安装额外的常用工具..."
-    brew install fd ripgrep fzf zoxide jq
+    if confirm_action "是否安装额外工具 (fd, ripgrep, fzf, zoxide, jq)？" "y"; then
+      log_info "安装额外的常用工具..."
+      brew install fd ripgrep fzf zoxide jq
+    fi
     
     # 安装 Nerd Fonts
-    install_nerd_fonts
+    if confirm_action "是否安装 Nerd Fonts？" "y"; then
+      install_nerd_fonts
+    fi
     
     # 安装 macOS 特定工具
-    log_info "安装 macOS 特定工具..."
-    brew install trash kitty duf
+    if confirm_action "是否安装 macOS 特定工具 (trash, kitty, duf)？" "y"; then
+      log_info "安装 macOS 特定工具..."
+      brew install trash kitty duf
+    fi
     
     # 安装 nexttrace
     if ! command -v nexttrace &> /dev/null; then
-      log_info "安装 nexttrace..."
-      brew install nexttrace
+      if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
+        log_info "安装 nexttrace..."
+        brew install nexttrace
+      fi
     fi
     
     # 安装 dua
     if ! command -v dua &> /dev/null; then
-      log_info "安装 dua..."
-      brew install dua-cli
+      if confirm_action "是否安装 dua (磁盘使用分析工具)？" "y"; then
+        log_info "安装 dua..."
+        brew install dua-cli
+      fi
     fi
     
     # 安装 ouch (解压工具)
     if ! command -v ouch &> /dev/null; then
-      log_info "安装 ouch..."
-      brew install ouch
+      if confirm_action "是否安装 ouch (解压缩工具)？" "y"; then
+        log_info "安装 ouch..."
+        brew install ouch
+      fi
     fi
     
     # 使用 cargo 安装 zellij (如果从 brew 安装失败)
     if ! command -v zellij &> /dev/null; then
-      log_info "使用 cargo 安装 zellij..."
-      cargo install --locked zellij
+      if confirm_action "是否安装 zellij (终端复用器)？" "y"; then
+        log_info "使用 cargo 安装 zellij..."
+        cargo install --locked zellij
+      fi
     fi
     
     # 使用 Go 安装 tssh
     if ! command -v tssh &> /dev/null; then
-      log_info "使用 Go 安装 tssh..."
-      go install github.com/trzsz/tssh@latest
+      if confirm_action "是否安装 tssh (支持传输文件的 SSH 客户端)？" "y"; then
+        log_info "使用 Go 安装 tssh..."
+        go install github.com/trzsz/tssh@latest
+      fi
     fi
     
   elif [ "$OS" = "linux" ]; then
     if [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "kali" ]; then
-      log_info "更新包列表..."
-      sudo apt update
+      if confirm_action "是否更新软件包列表？" "y"; then
+        log_info "更新包列表..."
+        sudo apt update
+      fi
       
-      log_info "安装必要的包..."
-      sudo apt install -y git stow curl wget
+      if confirm_action "是否安装基础工具 (git, stow, curl, wget)？" "y"; then
+        log_info "安装必要的包..."
+        sudo apt install -y git stow curl wget
+      fi
       
       # 安装 trash-put
-      log_info "安装 trash-put..."
-      sudo apt install -y trash-cli
+      if confirm_action "是否安装 trash-put (安全删除工具)？" "y"; then
+        log_info "安装 trash-put..."
+        sudo apt install -y trash-cli
+      fi
       
       # 安装 starship
-      log_info "安装 Starship..."
-      curl -sS https://starship.rs/install.sh | sh -s -- -y
+      if confirm_action "是否安装 Starship (终端提示符)？" "y"; then
+        log_info "安装 Starship..."
+        curl -sS https://starship.rs/install.sh | sh -s -- -y
+      fi
       
       # 安装 neovim
-      log_info "安装 Neovim..."
-      sudo apt install -y neovim
+      if confirm_action "是否安装 Neovim (编辑器)？" "y"; then
+        log_info "安装 Neovim..."
+        sudo apt install -y neovim
+      fi
       
       # 安装 bat (batcat 在 Ubuntu/Debian 上)
-      log_info "安装 bat..."
-      sudo apt install -y bat || sudo apt install -y batcat
+      if confirm_action "是否安装 bat (增强版 cat)？" "y"; then
+        log_info "安装 bat..."
+        sudo apt install -y bat || sudo apt install -y batcat
+      fi
       
       # 安装 fd-find (fd 在 Ubuntu/Debian 上是 fd-find)
-      log_info "安装 fd..."
-      sudo apt install -y fd-find
-      if ! command -v fd &> /dev/null; then
-        mkdir -p ~/.local/bin
-        ln -sf $(which fdfind) ~/.local/bin/fd
-        export PATH="$HOME/.local/bin:$PATH"
+      if confirm_action "是否安装 fd (增强版 find)？" "y"; then
+        log_info "安装 fd..."
+        sudo apt install -y fd-find
+        if ! command -v fd &> /dev/null; then
+          mkdir -p ~/.local/bin
+          ln -sf $(which fdfind) ~/.local/bin/fd
+          export PATH="$HOME/.local/bin:$PATH"
+        fi
       fi
       
       # 安装 ripgrep
-      log_info "安装 ripgrep..."
-      sudo apt install -y ripgrep
+      if confirm_action "是否安装 ripgrep (增强版 grep)？" "y"; then
+        log_info "安装 ripgrep..."
+        sudo apt install -y ripgrep
+      fi
       
       # 安装 jq
-      log_info "安装 jq..."
-      sudo apt install -y jq
+      if confirm_action "是否安装 jq (JSON 处理工具)？" "y"; then
+        log_info "安装 jq..."
+        sudo apt install -y jq
+      fi
       
       # 安装 fzf
-      log_info "安装 fzf..."
       if ! command -v fzf &> /dev/null; then
-        git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-        ~/.fzf/install --no-bash --no-fish --key-bindings --completion --no-update-rc
+        if confirm_action "是否安装 fzf (模糊查找工具)？" "y"; then
+          log_info "安装 fzf..."
+          git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+          ~/.fzf/install --no-bash --no-fish --key-bindings --completion --no-update-rc
+        fi
       fi
       
       # 安装 zoxide
-      log_info "安装 zoxide..."
       if ! command -v zoxide &> /dev/null; then
-        curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+        if confirm_action "是否安装 zoxide (智能目录跳转)？" "y"; then
+          log_info "安装 zoxide..."
+          curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+        fi
       fi
       
       # 安装 Nerd Fonts
-      install_nerd_fonts
+      if confirm_action "是否安装 Nerd Fonts？" "y"; then
+        install_nerd_fonts
+      fi
       
       # 安装 nexttrace
-      log_info "安装 nexttrace..."
       if ! command -v nexttrace &> /dev/null; then
-        curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
-        sudo mv /tmp/nexttrace /usr/local/bin/ && \
-        sudo chmod +x /usr/local/bin/nexttrace
+        if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
+          log_info "安装 nexttrace..."
+          curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
+          sudo mv /tmp/nexttrace /usr/local/bin/ && \
+          sudo chmod +x /usr/local/bin/nexttrace
+        fi
       fi
       
       # 安装 dua
-      log_info "安装 dua..."
       if ! command -v dua &> /dev/null; then
-        cargo install --locked dua-cli
+        if confirm_action "是否安装 dua (磁盘使用分析工具)？" "y"; then
+          log_info "安装 dua..."
+          cargo install --locked dua-cli
+        fi
       fi
       
       # 安装 ouch (解压工具)
-      log_info "安装 ouch..."
       if ! command -v ouch &> /dev/null; then
-        cargo install --locked ouch
+        if confirm_action "是否安装 ouch (解压缩工具)？" "y"; then
+          log_info "安装 ouch..."
+          cargo install --locked ouch
+        fi
       fi
       
       # 安装 lsd
-      log_info "安装 lsd..."
       if ! command -v lsd &> /dev/null; then
-        # 获取 lsd 的最新版本
-        LSD_DEB_URL=$(curl -s https://api.github.com/repos/Peltoche/lsd/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
-        if [ -n "$LSD_DEB_URL" ]; then
-          wget -O /tmp/lsd.deb "$LSD_DEB_URL"
-          sudo dpkg -i /tmp/lsd.deb
-          rm /tmp/lsd.deb
-        else
-          log_info "使用 cargo 安装 lsd..."
-          cargo install --locked lsd
+        if confirm_action "是否安装 lsd (增强版 ls)？" "y"; then
+          log_info "安装 lsd..."
+          # 获取 lsd 的最新版本
+          LSD_DEB_URL=$(curl -s https://api.github.com/repos/Peltoche/lsd/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
+          if [ -n "$LSD_DEB_URL" ]; then
+            wget -O /tmp/lsd.deb "$LSD_DEB_URL"
+            sudo dpkg -i /tmp/lsd.deb
+            rm /tmp/lsd.deb
+          else
+            log_info "使用 cargo 安装 lsd..."
+            cargo install --locked lsd
+          fi
         fi
       fi
       
       # 安装 zellij
-      log_info "安装 zellij..."
       if ! command -v zellij &> /dev/null; then
-        # 获取 zellij 的最新版本
-        ZELLIJ_DEB_URL=$(curl -s https://api.github.com/repos/zellij-org/zellij/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
-        if [ -n "$ZELLIJ_DEB_URL" ]; then
-          wget -O /tmp/zellij.deb "$ZELLIJ_DEB_URL"
-          sudo dpkg -i /tmp/zellij.deb
-          rm /tmp/zellij.deb
-        else
-          log_info "使用 cargo 安装 zellij..."
-          cargo install --locked zellij
+        if confirm_action "是否安装 zellij (终端复用器)？" "y"; then
+          log_info "安装 zellij..."
+          # 获取 zellij 的最新版本
+          ZELLIJ_DEB_URL=$(curl -s https://api.github.com/repos/zellij-org/zellij/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
+          if [ -n "$ZELLIJ_DEB_URL" ]; then
+            wget -O /tmp/zellij.deb "$ZELLIJ_DEB_URL"
+            sudo dpkg -i /tmp/zellij.deb
+            rm /tmp/zellij.deb
+          else
+            log_info "使用 cargo 安装 zellij..."
+            cargo install --locked zellij
+          fi
         fi
       fi
       
       # helix 安装
-      log_info "安装 helix..."
       if ! command -v hx &> /dev/null; then
-        # 获取 helix 的最新版本
-        HELIX_DEB_URL=$(curl -s https://api.github.com/repos/helix-editor/helix/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
-        if [ -n "$HELIX_DEB_URL" ]; then
-          wget -O /tmp/helix.deb "$HELIX_DEB_URL"
-          sudo dpkg -i /tmp/helix.deb
-          rm /tmp/helix.deb
-        else
-          log_info "使用 cargo 安装 helix..."
-          cargo install --locked helix
+        if confirm_action "是否安装 helix (现代编辑器)？" "y"; then
+          log_info "安装 helix..."
+          # 获取 helix 的最新版本
+          HELIX_DEB_URL=$(curl -s https://api.github.com/repos/helix-editor/helix/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
+          if [ -n "$HELIX_DEB_URL" ]; then
+            wget -O /tmp/helix.deb "$HELIX_DEB_URL"
+            sudo dpkg -i /tmp/helix.deb
+            rm /tmp/helix.deb
+          else
+            log_info "使用 cargo 安装 helix..."
+            cargo install --locked helix
+          fi
         fi
       fi
       
       # yazi 安装
-      log_info "安装 yazi..."
       if ! command -v yazi &> /dev/null; then
-        log_info "使用 cargo 安装 yazi..."
-        cargo install --locked yazi
+        if confirm_action "是否安装 yazi (文件管理器)？" "y"; then
+          log_info "安装 yazi..."
+          cargo install --locked yazi
+        fi
       fi
       
       # 使用 Go 安装 tssh
       if ! command -v tssh &> /dev/null && command -v go &> /dev/null; then
-        log_info "使用 Go 安装 tssh..."
-        go install github.com/trzsz/tssh@latest
+        if confirm_action "是否安装 tssh (支持传输文件的 SSH 客户端)？" "y"; then
+          log_info "使用 Go 安装 tssh..."
+          go install github.com/trzsz/tssh@latest
+        fi
       fi
       
     elif [ "$DISTRO" = "redhat" ]; then
-      log_info "安装必要的包..."
-      sudo dnf install -y git stow curl wget
+      # RedHat/Fedora/CentOS 安装
+      if confirm_action "是否安装基础工具 (git, stow, curl, wget)？" "y"; then
+        log_info "安装必要的包..."
+        sudo dnf install -y git stow curl wget
+      fi
       
       # 安装 trash-put
-      log_info "安装 trash-put..."
-      sudo dnf install -y trash-cli
+      if confirm_action "是否安装 trash-put (安全删除工具)？" "y"; then
+        log_info "安装 trash-put..."
+        sudo dnf install -y trash-cli
+      fi
       
       # 安装 starship
-      log_info "安装 Starship..."
-      curl -sS https://starship.rs/install.sh | sh -s -- -y
+      if confirm_action "是否安装 Starship (终端提示符)？" "y"; then
+        log_info "安装 Starship..."
+        curl -sS https://starship.rs/install.sh | sh -s -- -y
+      fi
       
       # 安装 neovim
-      log_info "安装 Neovim..."
-      sudo dnf install -y neovim
+      if confirm_action "是否安装 Neovim (编辑器)？" "y"; then
+        log_info "安装 Neovim..."
+        sudo dnf install -y neovim
+      fi
       
       # 安装 bat
-      log_info "安装 bat..."
-      sudo dnf install -y bat
+      if confirm_action "是否安装 bat (增强版 cat)？" "y"; then
+        log_info "安装 bat..."
+        sudo dnf install -y bat
+      fi
       
       # 安装 fd-find
-      log_info "安装 fd..."
-      sudo dnf install -y fd-find
+      if confirm_action "是否安装 fd (增强版 find)？" "y"; then
+        log_info "安装 fd..."
+        sudo dnf install -y fd-find
+      fi
       
       # 安装 ripgrep
-      log_info "安装 ripgrep..."
-      sudo dnf install -y ripgrep
+      if confirm_action "是否安装 ripgrep (增强版 grep)？" "y"; then
+        log_info "安装 ripgrep..."
+        sudo dnf install -y ripgrep
+      fi
       
       # 安装 jq
-      log_info "安装 jq..."
-      sudo dnf install -y jq
+      if confirm_action "是否安装 jq (JSON 处理工具)？" "y"; then
+        log_info "安装 jq..."
+        sudo dnf install -y jq
+      fi
       
       # 安装 fzf
-      log_info "安装 fzf..."
       if ! command -v fzf &> /dev/null; then
-        git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-        ~/.fzf/install --no-bash --no-fish --key-bindings --completion --no-update-rc
+        if confirm_action "是否安装 fzf (模糊查找工具)？" "y"; then
+          log_info "安装 fzf..."
+          git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
+          ~/.fzf/install --no-bash --no-fish --key-bindings --completion --no-update-rc
+        fi
       fi
       
       # 安装 zoxide
-      log_info "安装 zoxide..."
       if ! command -v zoxide &> /dev/null; then
-        curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+        if confirm_action "是否安装 zoxide (智能目录跳转)？" "y"; then
+          log_info "安装 zoxide..."
+          curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
+        fi
       fi
       
       # 安装 Nerd Fonts
-      install_nerd_fonts
-      
-      # 安装 nexttrace
-      log_info "安装 nexttrace..."
-      if ! command -v nexttrace &> /dev/null; then
-        curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
-        sudo mv /tmp/nexttrace /usr/local/bin/ && \
-        sudo chmod +x /usr/local/bin/nexttrace
+      if confirm_action "是否安装 Nerd Fonts？" "y"; then
+        install_nerd_fonts
       fi
       
-      # 安装其他工具（可能需要 EPEL 或其他仓库）
-      log_info "安装 EPEL 仓库..."
-      sudo dnf install -y epel-release
+      # 安装 nexttrace
+      if ! command -v nexttrace &> /dev/null; then
+        if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
+          log_info "安装 nexttrace..."
+          curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
+          sudo mv /tmp/nexttrace /usr/local/bin/ && \
+          sudo chmod +x /usr/local/bin/nexttrace
+        fi
+      fi
+      
+      # 安装 EPEL 仓库
+      if confirm_action "是否安装 EPEL 仓库 (提供额外软件包)？" "y"; then
+        log_info "安装 EPEL 仓库..."
+        sudo dnf install -y epel-release
+      fi
       
       # 使用 cargo 安装一些工具
-      log_info "使用 cargo 安装 lsd, yazi, zellij, helix, dua, ouch..."
-      cargo install --locked lsd
-      cargo install --locked yazi
-      cargo install --locked zellij
-      cargo install --locked helix
-      cargo install --locked dua-cli
-      cargo install --locked ouch
+      if confirm_action "是否安装 Rust 工具 (lsd, yazi, zellij, helix, dua, ouch)？" "y"; then
+        log_info "使用 cargo 安装 lsd, yazi, zellij, helix, dua, ouch..."
+        cargo install --locked lsd
+        cargo install --locked yazi
+        cargo install --locked zellij
+        cargo install --locked helix
+        cargo install --locked dua-cli
+        cargo install --locked ouch
+      fi
       
       # 使用 Go 安装 tssh
       if ! command -v tssh &> /dev/null && command -v go &> /dev/null; then
-        log_info "使用 Go 安装 tssh..."
-        go install github.com/trzsz/tssh@latest
+        if confirm_action "是否安装 tssh (支持传输文件的 SSH 客户端)？" "y"; then
+          log_info "使用 Go 安装 tssh..."
+          go install github.com/trzsz/tssh@latest
+        fi
       fi
       
     elif [ "$DISTRO" = "arch" ]; then
-      log_info "安装必要的包..."
-      sudo pacman -S --noconfirm git stow curl wget
+      # Arch Linux 安装
+      if confirm_action "是否安装基础工具 (git, stow, curl, wget)？" "y"; then
+        log_info "安装必要的包..."
+        sudo pacman -S --noconfirm git stow curl wget
+      fi
       
       # 安装 trash-put
-      log_info "安装 trash-put..."
-      sudo pacman -S --noconfirm trash-cli
+      if confirm_action "是否安装 trash-put (安全删除工具)？" "y"; then
+        log_info "安装 trash-put..."
+        sudo pacman -S --noconfirm trash-cli
+      fi
       
       # 在 Arch 上安装软件
-      log_info "安装其他推荐的软件..."
-      sudo pacman -S --noconfirm starship neovim helix bat lsd zellij fd ripgrep fzf zoxide jq perl-image-exiftool duf
+      if confirm_action "是否安装推荐软件包？" "y"; then
+        log_info "安装其他推荐的软件..."
+        sudo pacman -S --noconfirm starship neovim helix bat lsd zellij fd ripgrep fzf zoxide jq perl-image-exiftool duf
+      fi
       
       # 安装 Nerd Fonts
-      install_nerd_fonts
+      if confirm_action "是否安装 Nerd Fonts？" "y"; then
+        install_nerd_fonts
+      fi
       
       # 安装 nexttrace
-      log_info "安装 nexttrace..."
       if ! command -v nexttrace &> /dev/null; then
-        curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
-        sudo mv /tmp/nexttrace /usr/local/bin/ && \
-        sudo chmod +x /usr/local/bin/nexttrace
+        if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
+          log_info "安装 nexttrace..."
+          curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
+          sudo mv /tmp/nexttrace /usr/local/bin/ && \
+          sudo chmod +x /usr/local/bin/nexttrace
+        fi
       fi
       
       # yazi 可能需要从 AUR 安装
       if ! command -v yazi &> /dev/null; then
-        if command -v yay &> /dev/null; then
-          yay -S --noconfirm yazi
-        elif command -v paru &> /dev/null; then
-          paru -S --noconfirm yazi
-        else
-          log_info "使用 cargo 安装 yazi..."
-          cargo install --locked yazi
+        if confirm_action "是否安装 yazi (文件管理器)？" "y"; then
+          if command -v yay &> /dev/null; then
+            yay -S --noconfirm yazi
+          elif command -v paru &> /dev/null; then
+            paru -S --noconfirm yazi
+          else
+            log_info "使用 cargo 安装 yazi..."
+            cargo install --locked yazi
+          fi
         fi
       fi
       
       # 安装 dua
       if ! command -v dua &> /dev/null; then
-        if command -v yay &> /dev/null; then
-          yay -S --noconfirm dua-cli
-        elif command -v paru &> /dev/null; then
-          paru -S --noconfirm dua-cli
-        else
-          log_info "使用 cargo 安装 dua..."
-          cargo install --locked dua-cli
+        if confirm_action "是否安装 dua (磁盘使用分析工具)？" "y"; then
+          if command -v yay &> /dev/null; then
+            yay -S --noconfirm dua-cli
+          elif command -v paru &> /dev/null; then
+            paru -S --noconfirm dua-cli
+          else
+            log_info "使用 cargo 安装 dua..."
+            cargo install --locked dua-cli
+          fi
         fi
       fi
       
       # 安装 ouch
       if ! command -v ouch &> /dev/null; then
-        if command -v yay &> /dev/null; then
-          yay -S --noconfirm ouch
-        elif command -v paru &> /dev/null; then
-          paru -S --noconfirm ouch
-        else
-          log_info "使用 cargo 安装 ouch..."
-          cargo install --locked ouch
+        if confirm_action "是否安装 ouch (解压缩工具)？" "y"; then
+          if command -v yay &> /dev/null; then
+            yay -S --noconfirm ouch
+          elif command -v paru &> /dev/null; then
+            paru -S --noconfirm ouch
+          else
+            log_info "使用 cargo 安装 ouch..."
+            cargo install --locked ouch
+          fi
         fi
       fi
       
       # 使用 Go 安装 tssh
       if ! command -v tssh &> /dev/null && command -v go &> /dev/null; then
-        log_info "使用 Go 安装 tssh..."
-        go install github.com/trzsz/tssh@latest
+        if confirm_action "是否安装 tssh (支持传输文件的 SSH 客户端)？" "y"; then
+          log_info "使用 Go 安装 tssh..."
+          go install github.com/trzsz/tssh@latest
+        fi
       fi
     fi
   fi
