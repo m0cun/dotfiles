@@ -29,6 +29,7 @@ require("lazy").setup({
   { import = "core.plugins.git" },          -- Git 相关插件
   { import = "core.plugins.completion" },   -- 代码补全
   { import = "core.plugins.multicursor" },  -- 多光标支持
+  { import = "core.plugins.color"},         -- 颜色值颜色
   { import = "core.plugins.formatting" },   -- 代码格式化
   { import = "core.plugins.linting" },      -- 代码检查
   { import = "core.plugins.treesitter" },   -- 语法高亮和解析

@@ -1,6 +1,30 @@
 # Get editor completions based on the config schema
 "$schema" = 'https://starship.rs/config-schema.json'
 
+format = """
+$directory\
+$git_branch\
+$git_commit\
+$git_status\
+$env_var\
+$fill\
+$python\
+$lua\
+$nodejs\
+$golang\
+$rust\
+$c\
+$java\
+$ruby\
+$swift\
+$package\
+$docker_context\
+$jobs\
+$cmd_duration\
+$time\
+$line_break\
+$character"""
+
 palette = 'catppuccin_mocha'
 
 # Inserts a blank line between shell prompts
@@ -96,6 +120,7 @@ read_only = '󱧵 '
 read_only_style = ''
 
 [git_branch]
+format = '[$symbol$branch(:$remote_branch)]($style) '
 symbol = ' '
 
 [git_status]
@@ -112,46 +137,58 @@ diverged = '⇕⇡${ahead_count}⇣${behind_count}'
 behind = '⇣${count}'
 
 [git_commit]
-format = '[\($hash$tag\)]($style)[ ]'
-style = '(red)'
+format = '[\($hash$tag\)]($style) '
+style = 'bold green'
 commit_hash_length = 8
 disabled = false
+tag_disabled = false
+only_detached = false
 
 [aws]
 disabled = true
 
+[package]
+format = '[$symbol$version ]($style)'
+symbol = '󰏗 '
+
 [nodejs]
+format = '[$symbol($version )]($style)'
 symbol = '󰎙 '
 
 [dotnet]
+format = '[$symbol($version )]($style)'
 symbol = ' '
 
 [python]
+format = '[${symbol}${pyenv_prefix}(${version} )(\($virtualenv\) )]($style)'
 symbol = ' '
 
 [java]
-format = "via [$symbol($version )](bold red)"
+format = '[$symbol($version )]($style)'
 symbol = ' '
+style = 'bold red'
 
 [c]
+format = '[$symbol($version(-$name) )]($style)'
 symbol = ' '
 
 [swift]
-symbol = " "
+format = '[$symbol($version )]($style)'
+symbol = ' '
 
 [golang]
-symbol = " "
+format = '[$symbol($version )]($style)'
+symbol = ' '
 
 [lua]
+format = '[$symbol($version )]($style)'
 symbol = ' '
-disabled = true
 
 [terraform]
 symbol = '󱁢 '
 
 [fill]
-symbol = '─'
-style = 'fg:current_line'
+symbol = ' '
 
 [cmd_duration]
 min_time = 500
@@ -164,9 +201,15 @@ zsh_indicator = 'zsh'
 fish_indicator = 'fish'
 disabled = true
 
+[env_var.all_proxy]
+format = '[${symbol}]($style) '
+symbol = '󰚻 '
+style = 'bold sky'
+
 [time]
-time_format = '%H:%M'
-disabled = true
+time_format = '%R %v'
+style = 'bold peach'
+disabled = false
 
 [username]
 show_always = true
