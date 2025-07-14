@@ -191,6 +191,7 @@ symbol = '󱁢 '
 symbol = ' '
 
 [cmd_duration]
+format = '[  $duration]($style) '
 min_time = 500
 
 [shell]
@@ -207,9 +208,15 @@ symbol = '󰚻 '
 style = 'bold sky'
 
 [time]
+format = '[  $time]($style) '
 time_format = '%R %v'
 style = 'bold peach'
 disabled = false
+
+[jobs]
+format = '[$symbol$number]($style) '
+symbol = ' '
+number_threshold = 1
 
 [username]
 show_always = true
