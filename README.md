@@ -14,6 +14,7 @@
 - `yazi`: Yazi文件管理器配置
 - `zellij`: Zellij终端复用器配置
 - `tssh`: 支持传输文件的 SSH 客户端配置
+- `delta`: Delta Git 增强差异查看器配置
 
 ## 安装
 
@@ -44,6 +45,7 @@ cd ~/.dotfile
   - lsd: ls 命令的增强版
   - yazi: 终端文件管理器
   - zellij: 终端复用器
+  - git-delta: 语法高亮的 Git 差异查看器
   - fd: 现代化的 find 替代品
   - ripgrep: 现代化的 grep 替代品
   - fzf: 模糊查找工具
@@ -60,6 +62,7 @@ cd ~/.dotfile
   - uv: 现代化 Python 包管理工具（macOS 上通过 brew 安装）
   - tcping: TCP 连接测试工具
   - gohttpserver: 高性能 HTTP 文件服务器
+  - git-delta: 语法高亮的 Git 差异查看器，自动配置到 Git 中
 - 创建所需目录结构
 - 安装/更新 ZSH 插件（作为 Git 子模块）
 - 使用 stow 创建符号链接
@@ -222,6 +225,7 @@ ZSH配置包含以下插件支持：
 - **uv**: 快速的 Python 包管理工具，pip 的替代品
 - **tcping**: TCP 连接测试工具，类似 ping 但测试 TCP 连接
 - **gohttpserver**: 高性能 HTTP 文件服务器
+- **git-delta**: 语法高亮的 Git 差异查看器，支持并排视图和行号
 
 ### 特定系统工具
 

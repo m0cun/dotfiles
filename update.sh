@@ -212,6 +212,9 @@ update_system_packages() {
       if command -v ouch &> /dev/null; then
         cargo install --locked ouch
       fi
+      if command -v delta &> /dev/null; then
+        cargo install --locked git-delta
+      fi
     fi
   fi
   
@@ -345,6 +348,7 @@ reapply_symlinks() {
   stow -R lsd
   stow -R yazi
   stow -R zellij
+  stow -R delta
   
   # tssh 如果存在则更新符号链接
   if [ -d "tssh" ]; then
