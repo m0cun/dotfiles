@@ -29,6 +29,8 @@ elif [[ "$(uname)" == "Linux" ]]; then
 fi
 
 # 加载本地配置（不受版本控制）
-if [[ -f "$ZDOTDIR/configs/local_configs/local-profile.zsh" ]]; then
-  source "$ZDOTDIR/configs/local_configs/local-profile.zsh"
+# 使用 ZSH_DOTDIR 而不是 ZDOTDIR，避免影响子 shell
+ZSH_DOTDIR="${ZSH_DOTDIR:-$HOME/.config/zsh}"
+if [[ -f "$ZSH_DOTDIR/configs/local_configs/local-profile.zsh" ]]; then
+  source "$ZSH_DOTDIR/configs/local_configs/local-profile.zsh"
 fi

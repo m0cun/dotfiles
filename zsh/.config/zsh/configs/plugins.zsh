@@ -1,7 +1,9 @@
 # 插件配置模块
 
 # 定义插件目录
-PLUGINS_DIR="$ZDOTDIR/plugins"
+# 使用 ZSH_DOTDIR 而不是 ZDOTDIR
+ZSH_DOTDIR="${ZSH_DOTDIR:-$HOME/.config/zsh}"
+PLUGINS_DIR="$ZSH_DOTDIR/plugins"
 
 # fzf - 模糊查找工具
 if command -v fzf &>/dev/null; then
@@ -16,8 +18,8 @@ if [[ -d "$PLUGINS_DIR/fzf-tab" ]]; then
   source "$PLUGINS_DIR/fzf-tab/fzf-tab.plugin.zsh"
   
   # 加载fzf-tab配置
-  if [[ -f "$ZDOTDIR/configs/fzf-tab.zsh" ]]; then
-    source "$ZDOTDIR/configs/fzf-tab.zsh"
+  if [[ -f "$ZSH_DOTDIR/configs/fzf-tab.zsh" ]]; then
+    source "$ZSH_DOTDIR/configs/fzf-tab.zsh"
   fi
 fi
 

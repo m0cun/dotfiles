@@ -12,51 +12,53 @@ fi
 
 # 设置基本变量
 export XDG_CONFIG_HOME="$HOME/.config"
-export ZDOTDIR="$HOME/.config/zsh"
+# ZDOTDIR 不应该在 .zshrc 中设置，因为它会影响子 shell 的配置文件查找路径
+# 我们使用一个独立的变量来指向 zsh 配置目录
+export ZSH_DOTDIR="$HOME/.config/zsh"
 export DOTFILES="$HOME/.dotfile"
-export ZSH_CONFIG_DIR="$ZDOTDIR/configs"
+export ZSH_CONFIG_DIR="$ZSH_DOTDIR/configs"
 
 # 加载zsh模块
 # 加载顺序很重要：history > completion > prompt > plugins > aliases > exports > functions
 
 # 历史记录配置
-source "$ZDOTDIR/configs/history.zsh"
+source "$ZSH_DOTDIR/configs/history.zsh"
 
 # 判断操作系统类型
-source "$ZDOTDIR/configs/os-detection.zsh"
+source "$ZSH_DOTDIR/configs/os-detection.zsh"
 
 # 补全配置
-source "$ZDOTDIR/configs/completion.zsh"
+source "$ZSH_DOTDIR/configs/completion.zsh"
 
 # 提示符配置
-source "$ZDOTDIR/configs/prompt.zsh"
+source "$ZSH_DOTDIR/configs/prompt.zsh"
 
 # 插件配置
-source "$ZDOTDIR/configs/plugins.zsh"
+source "$ZSH_DOTDIR/configs/plugins.zsh"
 
 # 别名配置
-source "$ZDOTDIR/configs/aliases.zsh"
+source "$ZSH_DOTDIR/configs/aliases.zsh"
 
 # 环境变量配置
-source "$ZDOTDIR/configs/exports.zsh"
+source "$ZSH_DOTDIR/configs/exports.zsh"
 
 # 函数配置
-source "$ZDOTDIR/configs/functions.zsh"
+source "$ZSH_DOTDIR/configs/functions.zsh"
 
 # 加载特定于操作系统的配置
-if [[ -f "$ZDOTDIR/configs/os-specific/${OS_TYPE}.zsh" ]]; then
-  source "$ZDOTDIR/configs/os-specific/${OS_TYPE}.zsh"
+if [[ -f "$ZSH_DOTDIR/configs/os-specific/${OS_TYPE}.zsh" ]]; then
+  source "$ZSH_DOTDIR/configs/os-specific/${OS_TYPE}.zsh"
 fi
 
 # 加载特定于操作系统的环境变量
-if [[ -f "$ZDOTDIR/configs/os-specific/exports-${OS_TYPE}.zsh" ]]; then
-  source "$ZDOTDIR/configs/os-specific/exports-${OS_TYPE}.zsh"
+if [[ -f "$ZSH_DOTDIR/configs/os-specific/exports-${OS_TYPE}.zsh" ]]; then
+  source "$ZSH_DOTDIR/configs/os-specific/exports-${OS_TYPE}.zsh"
 fi
 
 # 加载本地配置目录中的文件（不受版本控制的配置）
 # 使用数组和 nullglob 选项避免无匹配文件时的错误
 setopt local_options nullglob
-config_files=("$ZDOTDIR/configs/local_configs/"*.zsh)
+config_files=("$ZSH_DOTDIR/configs/local_configs/"*.zsh)
 for config_file in "${config_files[@]}"; do
   [[ -f "$config_file" ]] && source "$config_file"
 done
