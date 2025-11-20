@@ -42,4 +42,4 @@ alias noproxy="unset all_proxy; unset https_proxy; unset http_proxy"
 
 # macOS特定环境变量
 export CLICOLOR=1
-export LSCOLORS=ExFxBxDxCxegedabagacad 
+export LSCOLORS=ExFxBxDxCxegedabagacad

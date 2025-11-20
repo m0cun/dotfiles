@@ -6,12 +6,12 @@
 # 判断操作系统类型
 if [[ "$(uname)" == "Darwin" ]]; then
   # macOS系统
-  
+
   # 加载OrbStack配置（如果存在）
   if [[ -f "$HOME/.orbstack/shell/init.zsh" ]]; then
     source "$HOME/.orbstack/shell/init.zsh" 2>/dev/null || :
   fi
-  
+
   # 检测是否为Apple Silicon
   if [[ "$(uname -m)" == "arm64" ]]; then
     # Apple Silicon特定配置
@@ -31,4 +31,4 @@ fi
 # 加载本地配置（不受版本控制）
 if [[ -f "$ZDOTDIR/configs/local_configs/local-profile.zsh" ]]; then
   source "$ZDOTDIR/configs/local_configs/local-profile.zsh"
-fi 
+fi

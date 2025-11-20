@@ -4,6 +4,12 @@
 # 加载性能分析（如果需要调试加载速度问题）
 # zmodload zsh/zprof
 
+# 首先加载 .zprofile 以确保环境变量（如 PATH）已设置
+# 这可以解决在非登录交互式 Shell（如 Zellij 或 VSCode 终端）中找不到命令的问题
+if [ -f "$HOME/.zprofile" ]; then
+  source "$HOME/.zprofile"
+fi
+
 # 设置基本变量
 export XDG_CONFIG_HOME="$HOME/.config"
 export ZDOTDIR="$HOME/.config/zsh"
@@ -56,4 +62,4 @@ for config_file in "${config_files[@]}"; do
 done
 
 # 结束性能分析（如果已启用）
-# zprof 
+# zprof

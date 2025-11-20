@@ -69,7 +69,16 @@ fi
 [[ "$TERM" == "xterm-kitty" ]] && alias ssh="TERM=xterm-256color ssh"
 
 # 查看公网IP
-alias myip='curl -s https://myip.ipip.net/json | jq "\"🎉🎉🎉 : \(.data.ip)  🎾🎾🎾 : \(.data.location[0]) - \(.data.location[1]) - \(.data.location[2])\""'
+alias myip='curl -s https://myip.ipip.net/json | jq "\"🎉 IP: \(.data.ip) | 🌍 : \(.data.location[0]) - \(.data.location[1]) - \(.data.location[2]) | 📶 : \(.data.location[4])\""'
+
+# 查询公网IP详情
+alias ipinfo='f() {
+  if [ $# -eq 0 ]; then
+    curl -s "http://ip-api.com/json/?lang=zh-CN";
+  else
+    curl -s "http://ip-api.com/json/$1?lang=zh-CN";
+    fi | jq "\"🎉 IP: \(.query) | 🌍 : \(.country) - \(.regionName) - \(.city) | 📶 : \(.isp)\"";
+}; f'
 
 # 路由追踪
 alias traceroute='nexttrace'
