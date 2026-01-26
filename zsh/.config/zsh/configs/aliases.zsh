@@ -62,6 +62,11 @@ if command -v yazi &>/dev/null; then
   }
 fi
 
+# claude-mem
+if command -v bun &>/dev/null && [[ -f "$HOME/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs" ]]; then
+  alias claude-mem='bun "$HOME/.claude/plugins/marketplaces/thedotmack/plugin/scripts/worker-service.cjs"'
+fi
+
 # ------------------------------
 # 网络工具
 # ------------------------------

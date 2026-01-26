@@ -1,7 +1,7 @@
 [[plugin.deps]]
 use = "ndtoan96/ouch"
-rev = "cfb9140"
-hash = "b5067143415bd2d46c0dfa57319ddcef"
+rev = "594b8a2"
+hash = "c9e628fc0312d198db22ae2fa74883b"
 
 [[plugin.deps]]
 use = "lpanebr/yazi-plugins:first-non-directory"
@@ -9,19 +9,19 @@ rev = "ca18a2c"
 hash = "5c20ffa5171dab34042e03d273dddc5b"
 
 [[plugin.deps]]
-use = "yazi-rs/plugins:smart-enter"
-rev = "eaf6920"
-hash = "56fdabc96fc1f4d53c96eb884b02a5be"
-
-[[plugin.deps]]
 use = "yazi-rs/plugins:full-border"
-rev = "eaf6920"
+rev = "6c71385"
 hash = "3996fc74044bc44144b323686f887e1"
 
 [[plugin.deps]]
 use = "yazi-rs/plugins:piper"
-rev = "eaf6920"
-hash = "64713dcd74daf9ec644883a5895e5d1"
+rev = "6c71385"
+hash = "25aee698dd1081001008ce0cb1cc4da3"
+
+[[plugin.deps]]
+use = "yazi-rs/plugins:smart-enter"
+rev = "6c71385"
+hash = "56fdabc96fc1f4d53c96eb884b02a5be"
 
 [flavor]
 deps = []

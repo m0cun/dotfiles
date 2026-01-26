@@ -37,6 +37,15 @@ if command -v fnm &>/dev/null; then
   eval "$(fnm env --use-on-cd --shell zsh)"
 fi
 
+# bun环境
+if [[ -d "$HOME/.bun" ]]; then
+  # bun completions
+  [ -s "$HOME/.bun/_bun" ] && source "$HOME/.bun/_bun"
+  # bun
+  export BUN_INSTALL="$HOME/.bun"
+  export PATH="$BUN_INSTALL/bin:$PATH"
+fi
+
 # Java环境 - jenv
 if command -v jenv &>/dev/null; then
   export PATH="$HOME/.jenv/bin:$PATH"
