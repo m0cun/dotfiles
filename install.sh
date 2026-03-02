@@ -1260,5 +1260,19 @@ main() {
   log_info "对于更多自定义，请查看 README.md 文件。"
 }
 
-# 运行主函数
-main
+# 支持直接调用脚本内任意函数：bash install.sh <function_name>
+# 不传参数时执行完整安装流程（main）
+if [[ $# -gt 0 ]]; then
+  if declare -f "$1" > /dev/null 2>&1; then
+    "$@"
+  else
+    log_error "未找到函数: $1"
+    log_info "可用函数示例："
+    log_info "  bash install.sh install_linux_completions"
+    log_info "  bash install.sh install_linux_tools"
+    log_info "  bash install.sh install_stew"
+    exit 1
+  fi
+else
+  main
+fi
