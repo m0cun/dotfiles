@@ -761,22 +761,38 @@ install_linux_tools() {
     fi
   fi
 
-  # ── yazi（需同时提取 ya，手动处理）──
+  # ── yazi（含 ya 插件管理器，gnu 包 → /opt，软链接到 /usr/local/bin）──
   if ! command -v yazi &>/dev/null; then
     if confirm_action "是否安装 yazi (文件管理器)？" "y"; then
       log_info "下载 yazi 二进制（含 ya 插件管理器）..."
       local YAZI_VER
       YAZI_VER=$(curl -s https://api.github.com/repos/sxyazi/yazi/releases/latest \
         | grep '"tag_name"' | cut -d'"' -f4)
-      wget -O /tmp/yazi.zip \
-        "https://github.com/sxyazi/yazi/releases/download/${YAZI_VER}/yazi-x86_64-unknown-linux-musl.zip"
-      unzip -q /tmp/yazi.zip -d /tmp/yazi_extract
-      mkdir -p "$HOME/.local/bin"
-      mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/yazi "$HOME/.local/bin/yazi"
-      mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/ya   "$HOME/.local/bin/ya"
-      chmod +x "$HOME/.local/bin/yazi" "$HOME/.local/bin/ya"
-      rm -rf /tmp/yazi.zip /tmp/yazi_extract
-      log_success "yazi 安装完成"
+      local YAZI_DIR="yazi-x86_64-unknown-linux-gnu"
+      local YAZI_ZIP="${YAZI_DIR}.zip"
+
+      wget -O "/tmp/${YAZI_ZIP}" \
+        "https://github.com/sxyazi/yazi/releases/download/${YAZI_VER}/${YAZI_ZIP}"
+      sudo unzip -q "/tmp/${YAZI_ZIP}" -d /opt
+      rm -f "/tmp/${YAZI_ZIP}"
+
+      sudo ln -sf "/opt/${YAZI_DIR}/yazi" /usr/local/bin/yazi
+      sudo ln -sf "/opt/${YAZI_DIR}/ya"   /usr/local/bin/ya
+
+      # 安装 zsh 补全（如果 zip 中包含 completions/ 目录）
+      local COMPLETIONS_SRC="/opt/${YAZI_DIR}/completions"
+      local ZSH_SITE_FUNC="/usr/local/share/zsh/site-functions"
+      if [ -d "$COMPLETIONS_SRC" ]; then
+        sudo mkdir -p "$ZSH_SITE_FUNC"
+        [ -f "${COMPLETIONS_SRC}/_yazi" ] && sudo cp "${COMPLETIONS_SRC}/_yazi" "${ZSH_SITE_FUNC}/_yazi" \
+          && log_info "已安装 yazi zsh 补全：${ZSH_SITE_FUNC}/_yazi"
+        [ -f "${COMPLETIONS_SRC}/_ya" ]   && sudo cp "${COMPLETIONS_SRC}/_ya"   "${ZSH_SITE_FUNC}/_ya"   \
+          && log_info "已安装 ya zsh 补全：${ZSH_SITE_FUNC}/_ya"
+      else
+        log_warning "未找到 completions/ 目录，跳过 zsh 补全安装（可手动从 release 包中提取）"
+      fi
+
+      log_success "yazi 安装完成: $(yazi --version 2>/dev/null || echo '版本未知')"
       log_info "运行 ya pkg update 安装插件..."
       ya pkg update || log_warning "ya pkg update 失败，稍后可手动运行"
     fi
@@ -809,12 +825,106 @@ install_linux_tools() {
     fi
   fi
 
+  # ── xh ──
+  if ! command -v xh &>/dev/null; then
+    if confirm_action "是否安装 xh (现代 HTTP 客户端)？" "y"; then
+      stew_install "ducaale/xh" "xh" ""
+    fi
+  fi
+
   # ── Nerd Fonts ──
   if confirm_action "是否安装 Nerd Fonts？" "y"; then
     install_nerd_fonts
   fi
 
+  # ── zsh 补全文件 ──
+  install_linux_completions
+
   log_success "Linux 工具安装完成"
+}
+
+# 为 Linux 手动安装的工具生成 zsh 补全
+# 补全文件安装至 /usr/local/share/zsh/site-functions/，与 macOS Homebrew 行为对齐
+install_linux_completions() {
+  local ZSH_SITE="/usr/local/share/zsh/site-functions"
+  sudo mkdir -p "$ZSH_SITE"
+  log_info "安装 zsh 补全文件到 ${ZSH_SITE}..."
+
+  # 辅助：生成并写入补全文件
+  # 用法: _gen_completion "<命令>" "<生成 completion 的 shell 命令>" "<目标文件名>"
+  _gen_completion() {
+    local bin="$1" cmd="$2" dest="${ZSH_SITE}/$3"
+    if command -v "$bin" &>/dev/null; then
+      if eval "$cmd" | sudo tee "$dest" >/dev/null 2>&1; then
+        log_info "补全已安装：$dest"
+      else
+        log_warning "$bin 补全生成失败（命令：$cmd）"
+      fi
+    fi
+  }
+
+  # starship
+  _gen_completion starship "starship completions zsh" "_starship"
+
+  # bat（通过 bat --generate-completion 输出）
+  _gen_completion bat "bat --generate-completion zsh" "_bat"
+
+  # fd
+  _gen_completion fd "fd --gen-completions zsh" "_fd"
+
+  # ripgrep
+  _gen_completion rg "rg --generate complete --shell zsh" "_rg"
+
+  # lsd
+  _gen_completion lsd "lsd --print-completions zsh" "_lsd"
+
+  # ouch
+  _gen_completion ouch "ouch completions --shell zsh" "_ouch"
+
+  # zoxide
+  _gen_completion zoxide "zoxide completions zsh" "_zoxide"
+
+  # fnm
+  _gen_completion fnm "fnm completions --shell zsh" "_fnm"
+
+  # uv / uvx（均由 uv 提供）
+  _gen_completion uv "uv generate-shell-completion zsh" "_uv"
+  _gen_completion uvx "uvx generate-shell-completion zsh" "_uvx"
+
+  # helix (hx)
+  _gen_completion hx "hx --completion-script-zsh" "_hx"
+
+  # delta（无内置 completion 命令，从 release 包 completions/ 中提取）
+  # delta 的补全在 release zip 内：completions/zsh/_delta
+  # 安装时若已提取可在此处理，否则跳过
+  local DELTA_COMP
+  DELTA_COMP=$(find /opt -name '_delta' -path '*/completions/*' 2>/dev/null | head -1)
+  if [ -n "$DELTA_COMP" ]; then
+    sudo cp "$DELTA_COMP" "${ZSH_SITE}/_delta"
+    log_info "补全已安装：${ZSH_SITE}/_delta"
+  fi
+
+  # fzf（通过内置脚本生成）
+  if command -v fzf &>/dev/null; then
+    local FZF_ZSH_COMP
+    FZF_ZSH_COMP=$(fzf --zsh 2>/dev/null)
+    # fzf --zsh 输出的是 source 片段而非标准 _fzf 补全，放到 fpath 外即可
+    # 标准补全文件通常在安装目录内
+    local FZF_COMP_FILE
+    FZF_COMP_FILE=$(find /usr /home -name '_fzf' 2>/dev/null | head -1)
+    if [ -n "$FZF_COMP_FILE" ]; then
+      sudo cp "$FZF_COMP_FILE" "${ZSH_SITE}/_fzf"
+      log_info "补全已安装：${ZSH_SITE}/_fzf"
+    fi
+  fi
+
+  # zellij
+  _gen_completion zellij "zellij setup --generate-completion zsh" "_zellij"
+
+  # xh
+  _gen_completion xh "xh --generate-completion zsh" "_xh"
+
+  log_success "zsh 补全安装完成（需重启 zsh 或执行 compinit 生效）"
 }
 
 # 检查并安装必要的依赖
