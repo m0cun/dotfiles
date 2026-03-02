@@ -71,11 +71,20 @@ export LS_COLORS="rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;
 
 # 代理设置
 # Clash for Linux (https://github.com/nelvko/clash-for-linux-install)
-if command -v clashon &>/dev/null || [[ -f "$HOME/.local/bin/clashon" ]] || [[ -f "/etc/profile.d/clash.sh" ]]; then
+# clashctl 将函数定义在 ~/.clashctl/scripts/cmd/clashctl.sh，
+# 由 .zshrc 末尾 source，但 linux.zsh 比它更早执行，所以这里主动加载。
+_CLASHCTL_SCRIPT="$HOME/.clashctl/scripts/cmd/clashctl.sh"
+if [[ -f "$_CLASHCTL_SCRIPT" ]] && ! command -v clashon &>/dev/null; then
+  source "$_CLASHCTL_SCRIPT"
+fi
+unset _CLASHCTL_SCRIPT
+
+if command -v clashon &>/dev/null; then
+  # Clash 已安装且函数已加载 → 映射到 proxy/noproxy
   alias proxy='clashon'
   alias noproxy='clashoff'
 else
-  # 若 clash 未安装，提供手动设置代理的 alias（端口默认 7890）
+  # Clash 未安装 → 手动 export 代理环境变量（端口默认 7890）
   alias proxy='export https_proxy=http://127.0.0.1:7890; export http_proxy=http://127.0.0.1:7890; export all_proxy=socks5://127.0.0.1:7890'
   alias noproxy='unset all_proxy; unset https_proxy; unset http_proxy'
   alias clashon='proxy'
