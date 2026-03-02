@@ -889,48 +889,82 @@ install_linux_completions() {
   # fd
   _gen_completion fd "fd --gen-completions zsh" "_fd"
 
-  # ripgrep（正确语法：--generate complete-zsh，非 --generate complete --shell zsh）
+  # ripgrep（正确语法：--generate complete-zsh）
   _gen_completion rg "rg --generate complete-zsh" "_rg"
 
   # fnm
   _gen_completion fnm "fnm completions --shell zsh" "_fnm"
 
-  # uv（覆盖 uv 和 uvx 两个命令）
+  # uv
   _gen_completion uv "uv generate-shell-completion zsh" "_uv"
-  _gen_completion uv "uv generate-shell-completion zsh --tool-name uvx" "_uvx"
+
+  # uvx（正确命令：uvx --generate-shell-completion，非 uv ... --tool-name uvx）
+  _gen_completion uvx "uvx --generate-shell-completion zsh" "_uvx"
 
   # zellij
   _gen_completion zellij "zellij setup --generate-completion zsh" "_zellij"
 
-  # xh（正确语法：--generate zsh，非 --generate-completion zsh）
-  _gen_completion xh "xh --generate zsh" "_xh"
+  # ouch（新版本支持 --completions flag）
+  _gen_completion ouch "ouch --completions zsh" "_ouch"
 
-  # ── 无 CLI 补全生成、从 GitHub raw 下载的工具 ──
+  # ── 从 GitHub raw 下载的工具（无 CLI 生成支持）──
 
-  # bat（补全仅在 release 包内，无 CLI flag）
-  _fetch_completion bat \
-    "https://raw.githubusercontent.com/sharkdp/bat/master/assets/completions/_bat.zsh" \
-    "_bat"
+  # xh（静态 completion 文件，无 CLI flag；已通过 GitHub API 确认路径）
+  _fetch_completion xh \
+    "https://raw.githubusercontent.com/ducaale/xh/master/completions/_xh" \
+    "_xh"
 
-  # lsd（1.x 移除了 --print-completions flag）
-  _fetch_completion lsd \
-    "https://raw.githubusercontent.com/lsd-rs/lsd/master/assets/completions/_lsd" \
-    "_lsd"
+  # helix（文件名是 hx.zsh，存为 _hx）
+  _fetch_completion hx \
+    "https://raw.githubusercontent.com/helix-editor/helix/master/contrib/completion/hx.zsh" \
+    "_hx"
 
-  # ouch（无 completions 子命令）
-  _fetch_completion ouch \
-    "https://raw.githubusercontent.com/ouch-org/ouch/main/completions/_ouch" \
-    "_ouch"
-
-  # zoxide（无 completions 子命令）
+  # zoxide（已验证可访问）
   _fetch_completion zoxide \
     "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/contrib/completions/_zoxide" \
     "_zoxide"
 
-  # helix（无 --completion-script-zsh flag）
-  _fetch_completion hx \
-    "https://raw.githubusercontent.com/helix-editor/helix/master/contrib/completion/_hx" \
-    "_hx"
+  # ── 从 release tarball 提取（源码无静态文件，build 时生成）──
+  # 辅助：下载 release tar.gz，按文件名通配提取补全文件
+  _extract_tar_completion() {
+    local bin="$1" repo="$2" tar_suffix="$3" comp_glob="$4" dest="${ZSH_SITE}/$5"
+    if ! command -v "$bin" &>/dev/null; then return; fi
+    local tag
+    tag=$(curl -s "https://api.github.com/repos/${repo}/releases/latest" \
+      | grep '"tag_name"' | cut -d'"' -f4)
+    local url="https://github.com/${repo}/releases/download/${tag}/${tar_suffix/VERSION/${tag}}"
+    local tmptar tmpdir
+    tmptar=$(mktemp --suffix=.tar.gz)
+    tmpdir=$(mktemp -d)
+    if wget -q -O "$tmptar" "$url" 2>/dev/null && [ -s "$tmptar" ]; then
+      tar -xzf "$tmptar" -C "$tmpdir" 2>/dev/null
+      local comp_file
+      comp_file=$(find "$tmpdir" -name "$comp_glob" | head -1)
+      if [ -n "$comp_file" ] && [ -s "$comp_file" ]; then
+        sudo cp "$comp_file" "$dest"
+        log_info "补全已安装：$dest"
+      else
+        log_warning "$bin release tar 中未找到 ${comp_glob}，跳过"
+      fi
+    else
+      log_warning "$bin release tar 下载失败（$url）"
+    fi
+    rm -rf "$tmptar" "$tmpdir"
+  }
+
+  # bat（release tar 内：autocomplete/_bat.zsh → 存为 _bat）
+  _extract_tar_completion bat \
+    "sharkdp/bat" \
+    "bat-VERSION-x86_64-unknown-linux-musl.tar.gz" \
+    "_bat.zsh" \
+    "_bat"
+
+  # lsd（release tar 内含 autocomplete/_lsd）
+  _extract_tar_completion lsd \
+    "lsd-rs/lsd" \
+    "lsd-VERSION-x86_64-unknown-linux-gnu.tar.gz" \
+    "_lsd" \
+    "_lsd"
 
   # ── 从 /opt 解压目录中查找补全文件 ──
 
