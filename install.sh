@@ -850,53 +850,91 @@ install_linux_completions() {
   sudo mkdir -p "$ZSH_SITE"
   log_info "安装 zsh 补全文件到 ${ZSH_SITE}..."
 
-  # 辅助：生成并写入补全文件
-  # 用法: _gen_completion "<命令>" "<生成 completion 的 shell 命令>" "<目标文件名>"
+  # 辅助：通过 CLI 命令生成补全并写入
+  # 修复 pipeline bug：用临时文件捕获输出，检查内容非空再安装
   _gen_completion() {
     local bin="$1" cmd="$2" dest="${ZSH_SITE}/$3"
-    if command -v "$bin" &>/dev/null; then
-      if eval "$cmd" | sudo tee "$dest" >/dev/null 2>&1; then
-        log_info "补全已安装：$dest"
-      else
-        log_warning "$bin 补全生成失败（命令：$cmd）"
-      fi
+    if ! command -v "$bin" &>/dev/null; then return; fi
+    local tmp
+    tmp=$(mktemp)
+    if eval "$cmd" > "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+      sudo cp "$tmp" "$dest"
+      log_info "补全已安装：$dest"
+    else
+      log_warning "$bin 补全生成失败（命令：$cmd）"
     fi
+    rm -f "$tmp"
   }
+
+  # 辅助：从 URL 下载补全文件
+  _fetch_completion() {
+    local bin="$1" url="$2" dest="${ZSH_SITE}/$3"
+    if ! command -v "$bin" &>/dev/null; then return; fi
+    local tmp
+    tmp=$(mktemp)
+    if curl -fsSL "$url" -o "$tmp" 2>/dev/null && [ -s "$tmp" ]; then
+      sudo cp "$tmp" "$dest"
+      log_info "补全已安装：$dest"
+    else
+      log_warning "$bin 补全下载失败（URL：$url）"
+    fi
+    rm -f "$tmp"
+  }
+
+  # ── 通过 CLI 生成补全的工具 ──
 
   # starship
   _gen_completion starship "starship completions zsh" "_starship"
 
-  # bat（通过 bat --generate-completion 输出）
-  _gen_completion bat "bat --generate-completion zsh" "_bat"
-
   # fd
   _gen_completion fd "fd --gen-completions zsh" "_fd"
 
-  # ripgrep
-  _gen_completion rg "rg --generate complete --shell zsh" "_rg"
-
-  # lsd
-  _gen_completion lsd "lsd --print-completions zsh" "_lsd"
-
-  # ouch
-  _gen_completion ouch "ouch completions --shell zsh" "_ouch"
-
-  # zoxide
-  _gen_completion zoxide "zoxide completions zsh" "_zoxide"
+  # ripgrep（正确语法：--generate complete-zsh，非 --generate complete --shell zsh）
+  _gen_completion rg "rg --generate complete-zsh" "_rg"
 
   # fnm
   _gen_completion fnm "fnm completions --shell zsh" "_fnm"
 
-  # uv / uvx（均由 uv 提供）
+  # uv（覆盖 uv 和 uvx 两个命令）
   _gen_completion uv "uv generate-shell-completion zsh" "_uv"
-  _gen_completion uvx "uvx generate-shell-completion zsh" "_uvx"
+  _gen_completion uv "uv generate-shell-completion zsh --tool-name uvx" "_uvx"
 
-  # helix (hx)
-  _gen_completion hx "hx --completion-script-zsh" "_hx"
+  # zellij
+  _gen_completion zellij "zellij setup --generate-completion zsh" "_zellij"
 
-  # delta（无内置 completion 命令，从 release 包 completions/ 中提取）
-  # delta 的补全在 release zip 内：completions/zsh/_delta
-  # 安装时若已提取可在此处理，否则跳过
+  # xh（正确语法：--generate zsh，非 --generate-completion zsh）
+  _gen_completion xh "xh --generate zsh" "_xh"
+
+  # ── 无 CLI 补全生成、从 GitHub raw 下载的工具 ──
+
+  # bat（补全仅在 release 包内，无 CLI flag）
+  _fetch_completion bat \
+    "https://raw.githubusercontent.com/sharkdp/bat/master/assets/completions/_bat.zsh" \
+    "_bat"
+
+  # lsd（1.x 移除了 --print-completions flag）
+  _fetch_completion lsd \
+    "https://raw.githubusercontent.com/lsd-rs/lsd/master/assets/completions/_lsd" \
+    "_lsd"
+
+  # ouch（无 completions 子命令）
+  _fetch_completion ouch \
+    "https://raw.githubusercontent.com/ouch-org/ouch/main/completions/_ouch" \
+    "_ouch"
+
+  # zoxide（无 completions 子命令）
+  _fetch_completion zoxide \
+    "https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/contrib/completions/_zoxide" \
+    "_zoxide"
+
+  # helix（无 --completion-script-zsh flag）
+  _fetch_completion hx \
+    "https://raw.githubusercontent.com/helix-editor/helix/master/contrib/completion/_hx" \
+    "_hx"
+
+  # ── 从 /opt 解压目录中查找补全文件 ──
+
+  # delta（release zip 内含 completions/）
   local DELTA_COMP
   DELTA_COMP=$(find /opt -name '_delta' -path '*/completions/*' 2>/dev/null | head -1)
   if [ -n "$DELTA_COMP" ]; then
@@ -904,12 +942,10 @@ install_linux_completions() {
     log_info "补全已安装：${ZSH_SITE}/_delta"
   fi
 
-  # fzf（通过内置脚本生成）
+  # yazi / ya（已在安装步骤中从 release zip 复制，此处跳过）
+
+  # fzf（标准 _fzf 补全文件通常在安装目录内）
   if command -v fzf &>/dev/null; then
-    local FZF_ZSH_COMP
-    FZF_ZSH_COMP=$(fzf --zsh 2>/dev/null)
-    # fzf --zsh 输出的是 source 片段而非标准 _fzf 补全，放到 fpath 外即可
-    # 标准补全文件通常在安装目录内
     local FZF_COMP_FILE
     FZF_COMP_FILE=$(find /usr /home -name '_fzf' 2>/dev/null | head -1)
     if [ -n "$FZF_COMP_FILE" ]; then
@@ -917,12 +953,6 @@ install_linux_completions() {
       log_info "补全已安装：${ZSH_SITE}/_fzf"
     fi
   fi
-
-  # zellij
-  _gen_completion zellij "zellij setup --generate-completion zsh" "_zellij"
-
-  # xh
-  _gen_completion xh "xh --generate-completion zsh" "_xh"
 
   log_success "zsh 补全安装完成（需重启 zsh 或执行 compinit 生效）"
 }
