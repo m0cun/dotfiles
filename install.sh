@@ -581,6 +581,50 @@ install_linux_base_packages() {
       log_warning "请手动运行 clashon 并确认订阅链接已设置，再继续安装其他工具"
     fi
   fi
+
+  # ── Docker（官方通用脚本，支持 Debian/Ubuntu/Fedora/CentOS/Arch）──
+  if ! command -v docker &>/dev/null; then
+    if confirm_action "是否安装 Docker（官方 get.docker.com 脚本）？" "y"; then
+      log_info "使用官方脚本安装 Docker..."
+      curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+      sudo sh /tmp/get-docker.sh
+      rm -f /tmp/get-docker.sh
+
+      # 将当前用户加入 docker 组（免 sudo 运行 docker）
+      sudo usermod -aG docker "$USER"
+      log_info "已将 $USER 加入 docker 组，重新登录后生效"
+
+      # 配置镜像加速 + 防火墙
+      configure_docker_daemon
+
+      # 启用并启动 Docker 服务（systemd 环境）
+      if command -v systemctl &>/dev/null; then
+        sudo systemctl enable --now docker
+        log_info "Docker 服务已启用并启动"
+      fi
+
+      log_success "Docker 安装完成: $(docker --version 2>/dev/null || echo '版本未知')"
+    fi
+  else
+    log_success "Docker 已安装: $(docker --version)"
+    if confirm_action "是否重新配置 Docker 镜像加速与防火墙？" "n"; then
+      configure_docker_daemon
+      sudo systemctl restart docker
+    fi
+  fi
+}
+
+# 配置 Docker daemon：国内镜像加速
+# 可单独调用：bash install.sh configure_docker_daemon
+configure_docker_daemon() {
+  log_info "配置 Docker daemon（国内镜像加速）..."
+
+  # n3.ink helper 脚本自动检测发行版并写入 daemon.json registry-mirrors
+  # UFW 端口暴露问题建议通过 -p 127.0.0.1:port:port 绑定本地地址规避
+  log_info "运行 n3.ink Docker 镜像加速配置脚本..."
+  bash -c "$(curl -sSL https://n3.ink/helper)"
+
+  log_success "Docker daemon 配置完成（重启 Docker 后生效：sudo systemctl restart docker）"
 }
 
 # 第二层：安装 stew（GitHub 二进制包管理器，需要 Go 环境）
@@ -683,9 +727,34 @@ install_linux_tools() {
     log_success "Neovim 已安装: $(nvim --version | head -1)"
   fi
 
-  # ── bat ──
-  if confirm_action "是否安装 bat (增强版 cat)？" "y"; then
-    stew_install "sharkdp/bat" "bat" ""
+  # ── bat（gnu tar → /opt + 软链接）──
+  if ! command -v bat &>/dev/null; then
+    if confirm_action "是否安装 bat (增强版 cat)？" "y"; then
+      log_info "下载 bat 二进制..."
+      local BAT_VER
+      BAT_VER=$(curl -s https://api.github.com/repos/sharkdp/bat/releases/latest \
+        | grep '"tag_name"' | cut -d'"' -f4)
+      local BAT_DIR="bat-${BAT_VER}-x86_64-unknown-linux-gnu"
+      local BAT_TAR="${BAT_DIR}.tar.gz"
+
+      wget -O "/tmp/${BAT_TAR}" \
+        "https://github.com/sharkdp/bat/releases/download/${BAT_VER}/${BAT_TAR}"
+      sudo tar -C /opt -xzf "/tmp/${BAT_TAR}"
+      rm -f "/tmp/${BAT_TAR}"
+
+      sudo ln -sf "/opt/${BAT_DIR}/bat" /usr/local/bin/bat
+
+      # 安装 zsh 补全
+      local ZSH_SITE="/usr/local/share/zsh/site-functions"
+      sudo mkdir -p "$ZSH_SITE"
+      [ -f "/opt/${BAT_DIR}/autocomplete/bat.zsh" ] \
+        && sudo cp "/opt/${BAT_DIR}/autocomplete/bat.zsh" "${ZSH_SITE}/_bat" \
+        && log_info "已安装 bat zsh 补全：${ZSH_SITE}/_bat"
+
+      log_success "bat 安装完成: $(bat --version 2>/dev/null || echo '版本未知')"
+    fi
+  else
+    log_success "bat 已安装: $(bat --version)"
   fi
 
   # ── fd ──
@@ -754,11 +823,42 @@ install_linux_tools() {
     fi
   fi
 
-  # ── ouch ──
+  # ── ouch（gnu tar → /opt + 软链接 + 补全 + man 页）──
   if ! command -v ouch &>/dev/null; then
-    if confirm_action "是否安装 ouch (解压缩工具)？" "y"; then
-      stew_install "ouch-org/ouch" "ouch" ""
+    if confirm_action "是否安装 ouch (现代解压缩工具)？" "y"; then
+      log_info "下载 ouch 二进制..."
+      local OUCH_VER
+      OUCH_VER=$(curl -s https://api.github.com/repos/ouch-org/ouch/releases/latest \
+        | grep '"tag_name"' | cut -d'"' -f4)
+      local OUCH_DIR="ouch-x86_64-unknown-linux-gnu"
+      local OUCH_TAR="${OUCH_DIR}.tar.gz"
+
+      wget -O "/tmp/${OUCH_TAR}" \
+        "https://github.com/ouch-org/ouch/releases/download/${OUCH_VER}/${OUCH_TAR}"
+      sudo tar -C /opt -xzf "/tmp/${OUCH_TAR}"
+      rm -f "/tmp/${OUCH_TAR}"
+
+      sudo ln -sf "/opt/${OUCH_DIR}/ouch" /usr/local/bin/ouch
+
+      # 安装 zsh 补全
+      local ZSH_SITE="/usr/local/share/zsh/site-functions"
+      sudo mkdir -p "$ZSH_SITE"
+      [ -f "/opt/${OUCH_DIR}/completions/_ouch" ] \
+        && sudo cp "/opt/${OUCH_DIR}/completions/_ouch" "${ZSH_SITE}/_ouch" \
+        && log_info "已安装 ouch zsh 补全：${ZSH_SITE}/_ouch"
+
+      # 安装 man 页
+      local MAN1="/usr/local/share/man/man1"
+      sudo mkdir -p "$MAN1"
+      for f in "/opt/${OUCH_DIR}/man/"*.1; do
+        sudo cp "$f" "$MAN1/"
+      done
+      log_info "ouch man 页已安装到 ${MAN1}"
+
+      log_success "ouch 安装完成: $(ouch --version 2>/dev/null || echo '版本未知')"
     fi
+  else
+    log_success "ouch 已安装: $(ouch --version)"
   fi
 
   # ── yazi（含 ya 插件管理器，gnu 包 → /opt，软链接到 /usr/local/bin）──
@@ -829,6 +929,13 @@ install_linux_tools() {
   if ! command -v xh &>/dev/null; then
     if confirm_action "是否安装 xh (现代 HTTP 客户端)？" "y"; then
       stew_install "ducaale/xh" "xh" ""
+    fi
+  fi
+
+  # ── doggo ──
+  if ! command -v doggo &>/dev/null; then
+    if confirm_action "是否安装 doggo (DNS 查询工具)？" "y"; then
+      stew_install "mr-karan/doggo" "doggo" ""
     fi
   fi
 
@@ -904,8 +1011,10 @@ install_linux_completions() {
   # zellij
   _gen_completion zellij "zellij setup --generate-completion zsh" "_zellij"
 
-  # ouch（新版本支持 --completions flag）
-  _gen_completion ouch "ouch --completions zsh" "_ouch"
+  # doggo（doggo completions zsh）
+  _gen_completion doggo "doggo completions zsh" "_doggo"
+
+  # ouch（已在安装步骤中从 /opt 复制，此处跳过）
 
   # ── 从 GitHub raw 下载的工具（无 CLI 生成支持）──
 
@@ -952,13 +1061,6 @@ install_linux_completions() {
     rm -rf "$tmptar" "$tmpdir"
   }
 
-  # bat（release tar 内：autocomplete/_bat.zsh → 存为 _bat）
-  _extract_tar_completion bat \
-    "sharkdp/bat" \
-    "bat-VERSION-x86_64-unknown-linux-musl.tar.gz" \
-    "_bat.zsh" \
-    "_bat"
-
   # lsd（release tar 内含 autocomplete/_lsd）
   _extract_tar_completion lsd \
     "lsd-rs/lsd" \
@@ -967,6 +1069,8 @@ install_linux_completions() {
     "_lsd"
 
   # ── 从 /opt 解压目录中查找补全文件 ──
+
+  # bat / ya（已在安装步骤中从 /opt 复制，此处跳过）
 
   # delta（release zip 内含 completions/）
   local DELTA_COMP
@@ -987,6 +1091,11 @@ install_linux_completions() {
       log_info "补全已安装：${ZSH_SITE}/_fzf"
     fi
   fi
+
+  # docker（官方 GitHub 维护的静态 _docker 补全文件）
+  _fetch_completion docker \
+    "https://raw.githubusercontent.com/docker/cli/master/contrib/completion/zsh/_docker" \
+    "_docker"
 
   log_success "zsh 补全安装完成（需重启 zsh 或执行 compinit 生效）"
 }
