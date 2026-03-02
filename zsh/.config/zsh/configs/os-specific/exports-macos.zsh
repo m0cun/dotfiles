@@ -34,3 +34,8 @@ fi
 if [[ -d "/opt/metasploit-framework/bin" ]]; then
   export PATH=$PATH:/opt/metasploit-framework/bin
 fi 
+
+# Obsidian
+if [[ -d "/Applications/Obsidian.app" ]]; then
+  export PATH="$PATH:/Applications/Obsidian.app/Contents/MacOS"
+fi

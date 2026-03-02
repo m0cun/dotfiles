@@ -67,4 +67,17 @@ function clean_system_linux() {
 }
 
 # Linux特定环境变量
-export LS_COLORS="rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32" 
+export LS_COLORS="rs=0:di=01;34:ln=01;36:mh=00:pi=40;33:so=01;35:do=01;35:bd=40;33;01:cd=40;33;01:or=40;31;01:mi=00:su=37;41:sg=30;43:ca=30;41:tw=30;42:ow=34;42:st=37;44:ex=01;32"
+
+# 代理设置
+# Clash for Linux (https://github.com/nelvko/clash-for-linux-install)
+if command -v clashon &>/dev/null || [[ -f "$HOME/.local/bin/clashon" ]] || [[ -f "/etc/profile.d/clash.sh" ]]; then
+  alias proxy='clashon'
+  alias noproxy='clashoff'
+else
+  # 若 clash 未安装，提供手动设置代理的 alias（端口默认 7890）
+  alias proxy='export https_proxy=http://127.0.0.1:7890; export http_proxy=http://127.0.0.1:7890; export all_proxy=socks5://127.0.0.1:7890'
+  alias noproxy='unset all_proxy; unset https_proxy; unset http_proxy'
+  alias clashon='proxy'
+  alias clashoff='noproxy'
+fi
