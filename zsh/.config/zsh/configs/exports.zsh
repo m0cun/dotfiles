@@ -3,10 +3,20 @@
 # ------------------------------
 # 基本环境变量
 # ------------------------------
-# 默认编辑器
-export EDITOR="nvim"
+# 默认编辑器（按优先级回退：nvim → vim → vi）
+if command -v nvim &>/dev/null; then
+  export EDITOR="nvim"
+elif command -v vim &>/dev/null; then
+  export EDITOR="vim"
+else
+  export EDITOR="vi"
+fi
 
 # 设置PATH
+# ~/.local/bin 优先：starship  / uv / pip 等工具默认安装在这里
+[[ ! -d "$HOME/.local/bin" ]] && mkdir -p "$HOME/.local/bin"
+export PATH="$HOME/.local/bin:$PATH"
+
 if [[ -n "$HOMEBREW_PREFIX" ]]; then
   # Use Homebrew prefix if available (set in os-detection.zsh for macOS)
   export PATH="$HOMEBREW_PREFIX/bin:$PATH"

@@ -583,79 +583,66 @@ install_linux_base_packages() {
   fi
 }
 
-# 第二层：引导安装 eget（GitHub Release 下载器）
-install_eget() {
-  if command -v eget &>/dev/null; then
-    log_success "eget 已安装: $(eget --version 2>&1 | head -1)"
+# 第二层：安装 stew（GitHub 二进制包管理器，需要 Go 环境）
+install_stew() {
+  if command -v stew &>/dev/null; then
+    log_success "stew 已安装"
     return 0
   fi
 
-  if ! confirm_action "是否安装 eget (GitHub 二进制下载工具)？" "y"; then
-    log_warning "跳过 eget 安装，后续工具将尝试备用安装方式"
+  if ! command -v go &>/dev/null; then
+    log_error "stew 需要 Go 环境，请先安装 Go"
+    return 1
+  fi
+
+  if ! confirm_action "是否安装 stew (GitHub 二进制包管理器)？" "y"; then
+    log_warning "跳过 stew 安装，后续工具将尝试备用安装方式"
     return 0
   fi
 
-  log_info "安装 eget..."
-  # 检测架构
-  local ARCH
-  case "$(uname -m)" in
-    x86_64)  ARCH="amd64" ;;
-    aarch64) ARCH="arm64" ;;
-    *)       ARCH="$(uname -m)" ;;
-  esac
+  log_info "安装 stew..."
+  go install github.com/marwanhawari/stew@latest
 
-  # 直接从 GitHub release 下载 eget 本体（不依赖 eget 自身）
-  local EGET_URL
-  EGET_URL=$(curl -s https://api.github.com/repos/zyedidia/eget/releases/latest \
-    | grep "browser_download_url.*linux.*${ARCH}.*tar.gz" \
-    | head -1 | cut -d'"' -f4)
-
-  if [ -n "$EGET_URL" ]; then
-    wget -O /tmp/eget.tar.gz "$EGET_URL"
-    tar -xzf /tmp/eget.tar.gz -C /tmp
-    sudo mv /tmp/eget_*/eget /usr/local/bin/eget 2>/dev/null \
-      || sudo find /tmp -name 'eget' -type f -exec mv {} /usr/local/bin/eget \;
-    sudo chmod +x /usr/local/bin/eget
-    rm -rf /tmp/eget.tar.gz /tmp/eget_*
-    log_success "eget 安装完成"
+  if command -v stew &>/dev/null; then
+    # 预配置 stew，将 bin 路径设为 ~/.local/bin（已在 PATH 中）
+    local STEW_CONFIG_DIR="$HOME/.config/stew"
+    local STEW_CONFIG="$STEW_CONFIG_DIR/stew.config.json"
+    if [[ ! -f "$STEW_CONFIG" ]]; then
+      mkdir -p "$STEW_CONFIG_DIR"
+      cat > "$STEW_CONFIG" <<'EOF'
+{
+  "stewPath": "~/.local/share/stew",
+  "stewBinPath": "~/.local/bin",
+  "excludeFromUpgradeAll": []
+}
+EOF
+      log_info "stew 配置已写入 $STEW_CONFIG"
+    fi
+    log_success "stew 安装完成"
   else
-    log_warning "无法获取 eget release，尝试官方安装脚本..."
-    curl -o /tmp/eget.sh https://zyedidia.github.io/eget.sh
-    bash /tmp/eget.sh
-    [ -f ./eget ] && sudo mv ./eget /usr/local/bin/eget
-    rm -f /tmp/eget.sh
-  fi
-
-  if command -v eget &>/dev/null; then
-    # 配置 EGET_BIN 供后续使用
-    export EGET_BIN=/usr/local/bin
-    log_success "eget 就绪: $(eget --version 2>&1 | head -1)"
-  else
-    log_error "eget 安装失败，后续工具将尝试备用方式"
+    log_error "stew 安装失败，请检查 Go 环境和网络连接"
   fi
 }
 
-# 辅助：用 eget 安装单个工具，失败时执行 fallback
-# 用法: eget_install "repo/tool" "binary_name" "--额外参数" "fallback_cmd"
-eget_install() {
+# 辅助：用 stew 安装单个工具，失败时执行 fallback
+# 用法: stew_install "user/repo" "binary_name" "fallback_cmd"
+stew_install() {
   local REPO="$1"
   local BIN="$2"
-  local EGET_ARGS="$3"
-  local FALLBACK="$4"
+  local FALLBACK="$3"
 
   if command -v "$BIN" &>/dev/null; then
     log_success "$BIN 已安装"
     return 0
   fi
 
-  if command -v eget &>/dev/null; then
-    log_info "eget 安装 $BIN..."
-    # shellcheck disable=SC2086
-    if eget "$REPO" --to /usr/local/bin $EGET_ARGS -q; then
+  if command -v stew &>/dev/null; then
+    log_info "stew 安装 $BIN ($REPO)..."
+    if stew install "$REPO"; then
       log_success "$BIN 安装完成"
       return 0
     else
-      log_warning "eget 安装 $BIN 失败"
+      log_warning "stew 安装 $BIN 失败"
     fi
   fi
 
@@ -668,9 +655,9 @@ eget_install() {
 }
 
 # 第三层：统一二进制安装（不区分发行版）
-install_linux_tools_via_eget() {
-  log_info "开始安装 Linux 工具（统一二进制方案）..."
-  export EGET_BIN=/usr/local/bin
+# stew 自动识别平台架构，不需要手动指定 asset
+install_linux_tools() {
+  log_info "开始安装 Linux 工具（stew 统一二进制方案）..."
 
   # ── Starship（官方脚本，含 shell 集成）──
   if ! command -v starship &>/dev/null; then
@@ -698,34 +685,34 @@ install_linux_tools_via_eget() {
 
   # ── bat ──
   if confirm_action "是否安装 bat (增强版 cat)？" "y"; then
-    eget_install "sharkdp/bat" "bat" "--asset musl" ""
+    stew_install "sharkdp/bat" "bat" ""
   fi
 
   # ── fd ──
   if confirm_action "是否安装 fd (增强版 find)？" "y"; then
-    eget_install "sharkdp/fd" "fd" "--asset musl" ""
+    stew_install "sharkdp/fd" "fd" ""
   fi
 
   # ── ripgrep ──
   if confirm_action "是否安装 ripgrep (增强版 grep)？" "y"; then
-    eget_install "BurntSushi/ripgrep" "rg" "--asset musl" ""
+    stew_install "BurntSushi/ripgrep" "rg" ""
   fi
 
   # ── git-delta ──
   if confirm_action "是否安装 git-delta (增强版 git diff)？" "y"; then
-    eget_install "dandavison/delta" "delta" "--asset musl" ""
+    stew_install "dandavison/delta" "delta" ""
   fi
 
   # ── jq ──
   if confirm_action "是否安装 jq (JSON 处理工具)？" "y"; then
-    eget_install "jqlang/jq" "jq" "--asset linux-amd64" ""
+    stew_install "jqlang/jq" "jq" ""
   fi
 
-  # ── fzf（有预编译 binary，也可 git clone）──
+  # ── fzf ──
   if ! command -v fzf &>/dev/null; then
     if confirm_action "是否安装 fzf (模糊查找工具)？" "y"; then
-      if command -v eget &>/dev/null; then
-        eget junegunn/fzf --to /usr/local/bin -q
+      if command -v stew &>/dev/null; then
+        stew install junegunn/fzf
         log_success "fzf 安装完成"
       else
         git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
@@ -743,34 +730,34 @@ install_linux_tools_via_eget() {
 
   # ── lsd ──
   if confirm_action "是否安装 lsd (增强版 ls)？" "y"; then
-    eget_install "lsd-rs/lsd" "lsd" "--asset musl" ""
+    stew_install "lsd-rs/lsd" "lsd" ""
   fi
 
   # ── zellij ──
   if ! command -v zellij &>/dev/null; then
     if confirm_action "是否安装 zellij (终端复用器)？" "y"; then
-      eget_install "zellij-org/zellij" "zellij" "--asset musl" ""
+      stew_install "zellij-org/zellij" "zellij" ""
     fi
   fi
 
   # ── helix ──
   if ! command -v hx &>/dev/null; then
     if confirm_action "是否安装 helix (现代编辑器)？" "y"; then
-      eget_install "helix-editor/helix" "hx" "" ""
+      stew_install "helix-editor/helix" "hx" ""
     fi
   fi
 
   # ── dua ──
   if ! command -v dua &>/dev/null; then
     if confirm_action "是否安装 dua (磁盘使用分析工具)？" "y"; then
-      eget_install "Byron/dua-cli" "dua" "--asset musl" ""
+      stew_install "Byron/dua-cli" "dua" ""
     fi
   fi
 
   # ── ouch ──
   if ! command -v ouch &>/dev/null; then
     if confirm_action "是否安装 ouch (解压缩工具)？" "y"; then
-      eget_install "ouch-org/ouch" "ouch" "--asset musl" ""
+      stew_install "ouch-org/ouch" "ouch" ""
     fi
   fi
 
@@ -784,9 +771,10 @@ install_linux_tools_via_eget() {
       wget -O /tmp/yazi.zip \
         "https://github.com/sxyazi/yazi/releases/download/${YAZI_VER}/yazi-x86_64-unknown-linux-musl.zip"
       unzip -q /tmp/yazi.zip -d /tmp/yazi_extract
-      sudo mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/yazi /usr/local/bin/yazi
-      sudo mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/ya   /usr/local/bin/ya
-      sudo chmod +x /usr/local/bin/yazi /usr/local/bin/ya
+      mkdir -p "$HOME/.local/bin"
+      mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/yazi "$HOME/.local/bin/yazi"
+      mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/ya   "$HOME/.local/bin/ya"
+      chmod +x "$HOME/.local/bin/yazi" "$HOME/.local/bin/ya"
       rm -rf /tmp/yazi.zip /tmp/yazi_extract
       log_success "yazi 安装完成"
       log_info "运行 ya pkg update 安装插件..."
@@ -797,8 +785,7 @@ install_linux_tools_via_eget() {
   # ── tssh ──
   if ! command -v tssh &>/dev/null; then
     if confirm_action "是否安装 tssh (支持文件传输的 SSH 客户端)？" "y"; then
-      eget_install "trzsz/tssh" "tssh" "--asset linux" \
-        "go install github.com/trzsz/tssh@latest"
+      stew_install "trzsz/tssh" "tssh" "go install github.com/trzsz/tssh@latest"
     fi
   fi
 
@@ -814,10 +801,10 @@ install_linux_tools_via_eget() {
   if ! command -v nexttrace &>/dev/null; then
     if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
       log_info "安装 nexttrace..."
-      curl -o /tmp/nexttrace -L \
+      mkdir -p "$HOME/.local/bin"
+      curl -o "$HOME/.local/bin/nexttrace" -L \
         https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64
-      sudo mv /tmp/nexttrace /usr/local/bin/
-      sudo chmod +x /usr/local/bin/nexttrace
+      chmod +x "$HOME/.local/bin/nexttrace"
       log_success "nexttrace 安装完成"
     fi
   fi
@@ -825,15 +812,6 @@ install_linux_tools_via_eget() {
   # ── Nerd Fonts ──
   if confirm_action "是否安装 Nerd Fonts？" "y"; then
     install_nerd_fonts
-  fi
-
-  # ── 编译依赖（如需 cargo 相关工具保留此步骤）──
-  if confirm_action "是否安装编译依赖 (build-essential/clang，cargo 相关工具需要)？" "n"; then
-    if command -v apt &>/dev/null; then
-      sudo apt install -y build-essential clang libclang-dev pkg-config
-    elif command -v dnf &>/dev/null; then
-      sudo dnf install -y gcc clang libclang-devel pkg-config
-    fi
   fi
 
   log_success "Linux 工具安装完成"
@@ -942,462 +920,14 @@ install_dependencies() {
 
   elif [ "$OS" = "linux" ]; then
     # Linux 统一安装：三层架构
-    # 第一层：最小基础包（git/stow/curl 等，唯一需要发行版判断的地方）
+    # 第一层：最小基础包 + Clash（唯一需要发行版判断的地方）
     install_linux_base_packages
 
-    # 第二层：引导 eget（GitHub Release 二进制下载器）
-    install_eget
+    # 第二层：安装 stew（需要 Go 环境）
+    install_stew
 
-    # 第三层：用 eget 统一安装所有工具，不再区分发行版
-    install_linux_tools_via_eget
-
-    if false; then # 以下为已废弃的发行版分支，保留供参考，不再执行
-    if [ "$DISTRO" = "ubuntu" ] || [ "$DISTRO" = "debian" ] || [ "$DISTRO" = "kali" ]; then
-      if confirm_action "是否更新软件包列表？" "y"; then
-        log_info "更新包列表..."
-        sudo apt update
-      fi
-
-      if confirm_action "是否安装基础工具 (git, stow, curl, wget)？" "y"; then
-        log_info "安装必要的包..."
-        sudo apt install -y git stow curl wget
-      fi
-
-      # 安装 编译依赖（cargo 编译工具链需要）
-      if confirm_action "是否安装编译依赖 (build-essential, clang, libclang-dev, pkg-config)？" "y"; then
-        log_info "安装编译依赖..."
-        sudo apt update
-        sudo apt install -y build-essential clang libclang-dev pkg-config
-      fi
-
-      # 安装 Clash for Linux（代理工具，建议提前安装避免后续网络问题）
-      if ! command -v clashon &> /dev/null && ! command -v clash &> /dev/null; then
-        if confirm_action "是否安装 Clash for Linux (代理工具，建议优先安装)？" "y"; then
-          log_info "安装 Clash for Linux..."
-          git clone --branch master --depth 1 https://gh-proxy.org/https://github.com/nelvko/clash-for-linux-install.git /tmp/clash-for-linux-install \
-            && cd /tmp/clash-for-linux-install \
-            && bash install.sh
-          cd - > /dev/null
-          log_info "Clash 安装完成，别名 clashon/clashoff 已在 linux.zsh 中配置"
-          log_info "请运行 clashon 开启代理，并确认订阅链接已设置"
-        fi
-      fi
-
-      # 安装 trash-put
-      if confirm_action "是否安装 trash-put (安全删除工具)？" "y"; then
-        log_info "安装 trash-put..."
-        sudo apt install -y trash-cli
-      fi
-
-      # 安装 starship
-      if confirm_action "是否安装 Starship (终端提示符)？" "y"; then
-        log_info "安装 Starship..."
-        curl -sS https://starship.rs/install.sh | sh -s -- -y
-      fi
-
-      # 安装 neovim（使用官方二进制，避免 apt 版本过旧）
-      if ! command -v nvim &> /dev/null; then
-        if confirm_action "是否安装 Neovim (编辑器，二进制安装)？" "y"; then
-          log_info "下载并安装 Neovim 二进制..."
-          local NVIM_VERSION
-          NVIM_VERSION=$(curl -s https://api.github.com/repos/neovim/neovim/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-          curl -LO "https://github.com/neovim/neovim/releases/download/${NVIM_VERSION}/nvim-linux-x86_64.tar.gz"
-          sudo tar -C /opt -xzf nvim-linux-x86_64.tar.gz
-          rm nvim-linux-x86_64.tar.gz
-          sudo ln -sf /opt/nvim-linux-x86_64/bin/nvim /usr/local/bin/nvim
-          log_success "Neovim 安装完成: $(nvim --version | head -1)"
-        fi
-      else
-        log_success "Neovim 已安装: $(nvim --version | head -1)"
-      fi
-
-      # 安装 bat（Ubuntu 上 apt 安装为 batcat，创建软连接为 bat）
-      if ! command -v bat &> /dev/null && ! command -v batcat &> /dev/null; then
-        if confirm_action "是否安装 bat (增强版 cat)？" "y"; then
-          log_info "安装 bat..."
-          sudo apt install -y bat || sudo apt install -y batcat
-          # Ubuntu/Debian 上 apt 安装的命令是 batcat，创建 bat 软连接
-          if command -v batcat &> /dev/null && ! command -v bat &> /dev/null; then
-            mkdir -p ~/.local/bin
-            ln -sf /usr/bin/batcat ~/.local/bin/bat
-            log_info "已创建软连接: ~/.local/bin/bat -> /usr/bin/batcat"
-          fi
-        fi
-      else
-        log_success "bat 已安装"
-      fi
-
-      # 安装 fd-find (fd 在 Ubuntu/Debian 上是 fd-find)
-      if confirm_action "是否安装 fd (增强版 find)？" "y"; then
-        log_info "安装 fd..."
-        sudo apt install -y fd-find
-        if ! command -v fd &> /dev/null; then
-          mkdir -p ~/.local/bin
-          ln -sf $(which fdfind) ~/.local/bin/fd
-          export PATH="$HOME/.local/bin:$PATH"
-        fi
-      fi
-
-      # 安装 git-delta（使用 deb 包安装）
-      if ! command -v delta &> /dev/null; then
-        if confirm_action "是否安装 git-delta (增强版 git diff)？" "y"; then
-          log_info "安装 git-delta..."
-          DELTA_DEB_URL=$(curl -s https://api.github.com/repos/dandavison/delta/releases/latest | grep "browser_download_url.*amd64.deb" | head -n 1 | cut -d'"' -f4)
-          if [ -n "$DELTA_DEB_URL" ]; then
-            wget -O /tmp/delta.deb "$DELTA_DEB_URL"
-            sudo dpkg -i /tmp/delta.deb
-            rm /tmp/delta.deb
-          else
-            log_warning "无法获取 git-delta deb 包，尝试 cargo 安装..."
-            cargo install git-delta
-          fi
-        fi
-      fi
-
-      # 安装 jq
-      if confirm_action "是否安装 jq (JSON 处理工具)？" "y"; then
-        log_info "安装 jq..."
-        sudo apt install -y jq
-      fi
-
-      # 安装 fzf
-      if ! command -v fzf &> /dev/null; then
-        if confirm_action "是否安装 fzf (模糊查找工具)？" "y"; then
-          log_info "安装 fzf..."
-          git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-          ~/.fzf/install --no-bash --no-fish --key-bindings --completion --no-update-rc
-        fi
-      fi
-
-      # 安装 zoxide
-      if ! command -v zoxide &> /dev/null; then
-        if confirm_action "是否安装 zoxide (智能目录跳转)？" "y"; then
-          log_info "安装 zoxide..."
-          curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
-        fi
-      fi
-
-      # 安装 Nerd Fonts
-      if confirm_action "是否安装 Nerd Fonts？" "y"; then
-        install_nerd_fonts
-      fi
-
-      # 安装 nexttrace
-      if ! command -v nexttrace &> /dev/null; then
-        if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
-          log_info "安装 nexttrace..."
-          curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
-          sudo mv /tmp/nexttrace /usr/local/bin/ && \
-          sudo chmod +x /usr/local/bin/nexttrace
-        fi
-      fi
-
-      # 安装 dua（使用二进制安装）
-      if ! command -v dua &> /dev/null; then
-        if confirm_action "是否安装 dua (磁盘使用分析工具)？" "y"; then
-          log_info "安装 dua..."
-          DUA_URL=$(curl -s https://api.github.com/repos/Byron/dua-cli/releases/latest | grep "browser_download_url.*x86_64-unknown-linux-musl.tar.gz" | head -n 1 | cut -d'"' -f4)
-          if [ -n "$DUA_URL" ]; then
-            wget -O /tmp/dua.tar.gz "$DUA_URL"
-            tar -xzf /tmp/dua.tar.gz -C /tmp
-            sudo mv /tmp/dua /usr/local/bin/dua
-            sudo chmod +x /usr/local/bin/dua
-            rm /tmp/dua.tar.gz
-          else
-            log_warning "无法获取 dua 二进制，回退到 cargo 安装..."
-            cargo install --locked dua-cli
-          fi
-        fi
-      fi
-
-      # 安装 ouch（使用二进制安装）
-      if ! command -v ouch &> /dev/null; then
-        if confirm_action "是否安装 ouch (解压缩工具)？" "y"; then
-          log_info "安装 ouch..."
-          OUCH_URL=$(curl -s https://api.github.com/repos/ouch-org/ouch/releases/latest | grep "browser_download_url.*x86_64-unknown-linux-musl.tar.gz" | head -n 1 | cut -d'"' -f4)
-          if [ -n "$OUCH_URL" ]; then
-            wget -O /tmp/ouch.tar.gz "$OUCH_URL"
-            tar -xzf /tmp/ouch.tar.gz -C /tmp
-            OUCH_BIN=$(tar -tzf /tmp/ouch.tar.gz 2>/dev/null | grep 'ouch$' || true)
-            sudo mv "/tmp/${OUCH_BIN##*/}" /usr/local/bin/ouch 2>/dev/null || sudo mv /tmp/ouch /usr/local/bin/ouch
-            sudo chmod +x /usr/local/bin/ouch
-            rm -f /tmp/ouch.tar.gz
-          else
-            log_warning "无法获取 ouch 二进制，回退到 cargo 安装..."
-            cargo install --locked ouch
-          fi
-        fi
-      fi
-
-      # 安装 lsd
-      if ! command -v lsd &> /dev/null; then
-        if confirm_action "是否安装 lsd (增强版 ls)？" "y"; then
-          log_info "安装 lsd..."
-          # 获取 lsd 的最新版本
-          LSD_DEB_URL=$(curl -s https://api.github.com/repos/Peltoche/lsd/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
-          if [ -n "$LSD_DEB_URL" ]; then
-            wget -O /tmp/lsd.deb "$LSD_DEB_URL"
-            sudo dpkg -i /tmp/lsd.deb
-            rm /tmp/lsd.deb
-          else
-            log_info "使用 cargo 安装 lsd..."
-            cargo install --locked lsd
-          fi
-        fi
-      fi
-
-      # 安装 zellij
-      if ! command -v zellij &> /dev/null; then
-        if confirm_action "是否安装 zellij (终端复用器)？" "y"; then
-          log_info "安装 zellij..."
-          # 获取 zellij 的最新版本
-          ZELLIJ_DEB_URL=$(curl -s https://api.github.com/repos/zellij-org/zellij/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
-          if [ -n "$ZELLIJ_DEB_URL" ]; then
-            wget -O /tmp/zellij.deb "$ZELLIJ_DEB_URL"
-            sudo dpkg -i /tmp/zellij.deb
-            rm /tmp/zellij.deb
-          else
-            log_info "使用 cargo 安装 zellij..."
-            cargo install --locked zellij
-          fi
-        fi
-      fi
-
-      # helix 安装
-      if ! command -v hx &> /dev/null; then
-        if confirm_action "是否安装 helix (现代编辑器)？" "y"; then
-          log_info "安装 helix..."
-          # 获取 helix 的最新版本
-          HELIX_DEB_URL=$(curl -s https://api.github.com/repos/helix-editor/helix/releases/latest | grep "browser_download_url.*_amd64.deb" | head -n 1 | cut -d '"' -f 4)
-          if [ -n "$HELIX_DEB_URL" ]; then
-            wget -O /tmp/helix.deb "$HELIX_DEB_URL"
-            sudo dpkg -i /tmp/helix.deb
-            rm /tmp/helix.deb
-          else
-            log_info "使用 cargo 安装 helix..."
-            cargo install --locked helix
-          fi
-        fi
-      fi
-
-      # yazi 安装（使用官方二进制）
-      if ! command -v yazi &> /dev/null; then
-        if confirm_action "是否安装 yazi (文件管理器)？" "y"; then
-          log_info "下载并安装 yazi 二进制..."
-          YAZI_VERSION=$(curl -s https://api.github.com/repos/sxyazi/yazi/releases/latest | grep '"tag_name"' | cut -d'"' -f4)
-          wget -O /tmp/yazi.zip "https://github.com/sxyazi/yazi/releases/download/${YAZI_VERSION}/yazi-x86_64-unknown-linux-musl.zip"
-          unzip -q /tmp/yazi.zip -d /tmp/yazi_extract
-          sudo mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/yazi /usr/local/bin/yazi
-          sudo mv /tmp/yazi_extract/yazi-x86_64-unknown-linux-musl/ya /usr/local/bin/ya
-          sudo chmod +x /usr/local/bin/yazi /usr/local/bin/ya
-          rm -rf /tmp/yazi.zip /tmp/yazi_extract
-          log_success "yazi 安装完成"
-          # 安装 yazi 插件
-          log_info "运行 ya pkg update 安装插件..."
-          ya pkg update
-        fi
-      fi
-
-      # 使用 Go 安装 tssh
-      if ! command -v tssh &> /dev/null && command -v go &> /dev/null; then
-        if confirm_action "是否安装 tssh (支持传输文件的 SSH 客户端)？" "y"; then
-          log_info "使用 Go 安装 tssh..."
-          go install github.com/trzsz/tssh@latest
-        fi
-      fi
-
-    elif [ "$DISTRO" = "redhat" ]; then
-      # RedHat/Fedora/CentOS 安装
-      if confirm_action "是否安装基础工具 (git, stow, curl, wget)？" "y"; then
-        log_info "安装必要的包..."
-        sudo dnf install -y git stow curl wget
-      fi
-
-      # 安装 trash-put
-      if confirm_action "是否安装 trash-put (安全删除工具)？" "y"; then
-        log_info "安装 trash-put..."
-        sudo dnf install -y trash-cli
-      fi
-
-      # 安装 starship
-      if confirm_action "是否安装 Starship (终端提示符)？" "y"; then
-        log_info "安装 Starship..."
-        curl -sS https://starship.rs/install.sh | sh -s -- -y
-      fi
-
-      # 安装 neovim
-      if confirm_action "是否安装 Neovim (编辑器)？" "y"; then
-        log_info "安装 Neovim..."
-        sudo dnf install -y neovim
-      fi
-
-      # 安装 bat
-      if confirm_action "是否安装 bat (增强版 cat)？" "y"; then
-        log_info "安装 bat..."
-        sudo dnf install -y bat
-      fi
-
-      # 安装 fd-find
-      if confirm_action "是否安装 fd (增强版 find)？" "y"; then
-        log_info "安装 fd..."
-        sudo dnf install -y fd-find
-      fi
-
-      # 安装 ripgrep
-      if confirm_action "是否安装 ripgrep (增强版 grep)？" "y"; then
-        log_info "安装 ripgrep..."
-        sudo dnf install -y ripgrep
-      fi
-
-      # 安装 jq
-      if confirm_action "是否安装 jq (JSON 处理工具)？" "y"; then
-        log_info "安装 jq..."
-        sudo dnf install -y jq
-      fi
-
-      # 安装 fzf
-      if ! command -v fzf &> /dev/null; then
-        if confirm_action "是否安装 fzf (模糊查找工具)？" "y"; then
-          log_info "安装 fzf..."
-          git clone --depth 1 https://github.com/junegunn/fzf.git ~/.fzf
-          ~/.fzf/install --no-bash --no-fish --key-bindings --completion --no-update-rc
-        fi
-      fi
-
-      # 安装 zoxide
-      if ! command -v zoxide &> /dev/null; then
-        if confirm_action "是否安装 zoxide (智能目录跳转)？" "y"; then
-          log_info "安装 zoxide..."
-          curl -sS https://raw.githubusercontent.com/ajeetdsouza/zoxide/main/install.sh | bash
-        fi
-      fi
-
-      # 安装 Nerd Fonts
-      if confirm_action "是否安装 Nerd Fonts？" "y"; then
-        install_nerd_fonts
-      fi
-
-      # 安装 nexttrace
-      if ! command -v nexttrace &> /dev/null; then
-        if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
-          log_info "安装 nexttrace..."
-          curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
-          sudo mv /tmp/nexttrace /usr/local/bin/ && \
-          sudo chmod +x /usr/local/bin/nexttrace
-        fi
-      fi
-
-      # 安装 EPEL 仓库
-      if confirm_action "是否安装 EPEL 仓库 (提供额外软件包)？" "y"; then
-        log_info "安装 EPEL 仓库..."
-        sudo dnf install -y epel-release
-      fi
-
-      # 使用 cargo 安装一些工具
-      if confirm_action "是否安装 Rust 工具 (lsd, yazi, zellij, helix, dua, ouch, git-delta)？" "y"; then
-        log_info "使用 cargo 安装 lsd, yazi, zellij, helix, dua, ouch, git-delta..."
-        cargo install --locked lsd
-        cargo install --locked yazi
-        cargo install --locked zellij
-        cargo install --locked helix
-        cargo install --locked dua-cli
-        cargo install --locked ouch
-        cargo install --locked git-delta
-      fi
-
-      # 使用 Go 安装 tssh
-      if ! command -v tssh &> /dev/null && command -v go &> /dev/null; then
-        if confirm_action "是否安装 tssh (支持传输文件的 SSH 客户端)？" "y"; then
-          log_info "使用 Go 安装 tssh..."
-          go install github.com/trzsz/tssh@latest
-        fi
-      fi
-
-    elif [ "$DISTRO" = "arch" ]; then
-      # Arch Linux 安装
-      if confirm_action "是否安装基础工具 (git, stow, curl, wget)？" "y"; then
-        log_info "安装必要的包..."
-        sudo pacman -S --noconfirm git stow curl wget
-      fi
-
-      # 安装 trash-put
-      if confirm_action "是否安装 trash-put (安全删除工具)？" "y"; then
-        log_info "安装 trash-put..."
-        sudo pacman -S --noconfirm trash-cli
-      fi
-
-      # 在 Arch 上安装软件
-      if confirm_action "是否安装推荐软件包？" "y"; then
-        log_info "安装其他推荐的软件..."
-        sudo pacman -S --noconfirm starship neovim helix bat lsd zellij fd ripgrep fzf zoxide jq perl-image-exiftool duf git-delta
-      fi
-
-      # 安装 Nerd Fonts
-      if confirm_action "是否安装 Nerd Fonts？" "y"; then
-        install_nerd_fonts
-      fi
-
-      # 安装 nexttrace
-      if ! command -v nexttrace &> /dev/null; then
-        if confirm_action "是否安装 nexttrace (路由追踪工具)？" "y"; then
-          log_info "安装 nexttrace..."
-          curl -o /tmp/nexttrace -L https://github.com/nxtrace/NTrace-core/releases/latest/download/nexttrace_linux_amd64 && \
-          sudo mv /tmp/nexttrace /usr/local/bin/ && \
-          sudo chmod +x /usr/local/bin/nexttrace
-        fi
-      fi
-
-      # yazi 可能需要从 AUR 安装
-      if ! command -v yazi &> /dev/null; then
-        if confirm_action "是否安装 yazi (文件管理器)？" "y"; then
-          if command -v yay &> /dev/null; then
-            yay -S --noconfirm yazi
-          elif command -v paru &> /dev/null; then
-            paru -S --noconfirm yazi
-          else
-            log_info "使用 cargo 安装 yazi..."
-            cargo install --locked yazi
-          fi
-        fi
-      fi
-
-      # 安装 dua
-      if ! command -v dua &> /dev/null; then
-        if confirm_action "是否安装 dua (磁盘使用分析工具)？" "y"; then
-          if command -v yay &> /dev/null; then
-            yay -S --noconfirm dua-cli
-          elif command -v paru &> /dev/null; then
-            paru -S --noconfirm dua-cli
-          else
-            log_info "使用 cargo 安装 dua..."
-            cargo install --locked dua-cli
-          fi
-        fi
-      fi
-
-      # 安装 ouch
-      if ! command -v ouch &> /dev/null; then
-        if confirm_action "是否安装 ouch (解压缩工具)？" "y"; then
-          if command -v yay &> /dev/null; then
-            yay -S --noconfirm ouch
-          elif command -v paru &> /dev/null; then
-            paru -S --noconfirm ouch
-          else
-            log_info "使用 cargo 安装 ouch..."
-            cargo install --locked ouch
-          fi
-        fi
-      fi
-
-      # 使用 Go 安装 tssh
-      if ! command -v tssh &> /dev/null && command -v go &> /dev/null; then
-        if confirm_action "是否安装 tssh (支持传输文件的 SSH 客户端)？" "y"; then
-          log_info "使用 Go 安装 tssh..."
-          go install github.com/trzsz/tssh@latest
-        fi
-      fi
-    fi
-    fi # end of deprecated distro branches
+    # 第三层：用 stew 统一安装所有工具，不区分发行版
+    install_linux_tools
   fi
 
   log_success "依赖安装完成"

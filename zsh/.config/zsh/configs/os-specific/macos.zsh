@@ -32,6 +32,12 @@ alias desktop="cd ~/Desktop"
 alias documents="cd ~/Documents"
 alias downloads="cd ~/Downloads"
 
+# trash - 安全删除（移至 macOS 垃圾箱，而非直接删除）
+# 安装：brew install trash
+if command -v trash &>/dev/null; then
+  alias rm="trash -F"
+fi
+
 # 代理设置
 # Surge
 if [[ -f "/Applications/Surge.app/Contents/MacOS/StartQurge" ]]; then

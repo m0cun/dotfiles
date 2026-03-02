@@ -17,10 +17,7 @@ if command -v nvim &>/dev/null; then
   alias vim="nvim"
 fi
 
-# trash - 安全删除替代品
-if command -v trash &>/dev/null; then
-  alias rm="trash -F"
-fi
+
 
 # ripgrep - grep替代品
 if command -v rg &>/dev/null; then
