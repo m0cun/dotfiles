@@ -19,13 +19,17 @@ export DOTFILES="$HOME/.dotfile"
 export ZSH_CONFIG_DIR="$ZSH_DOTDIR/configs"
 
 # 加载zsh模块
-# 加载顺序很重要：history > completion > prompt > plugins > aliases > exports > functions
+# 加载顺序很重要：history > exports > completion > prompt > plugins > aliases > functions
 
 # 历史记录配置
 source "$ZSH_DOTDIR/configs/history.zsh"
 
 # 判断操作系统类型
 source "$ZSH_DOTDIR/configs/os-detection.zsh"
+
+# 环境变量配置
+# 先准备 PATH，后面的 prompt / plugins / aliases 才能找到外部命令
+source "$ZSH_DOTDIR/configs/exports.zsh"
 
 # 补全配置
 source "$ZSH_DOTDIR/configs/completion.zsh"
@@ -37,10 +41,8 @@ source "$ZSH_DOTDIR/configs/prompt.zsh"
 source "$ZSH_DOTDIR/configs/plugins.zsh"
 
 # 别名配置
+# 依赖 PATH 的替代命令需要在环境变量就位后再判断
 source "$ZSH_DOTDIR/configs/aliases.zsh"
-
-# 环境变量配置
-source "$ZSH_DOTDIR/configs/exports.zsh"
 
 # 函数配置
 source "$ZSH_DOTDIR/configs/functions.zsh"
